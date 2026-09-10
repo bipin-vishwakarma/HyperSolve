@@ -1,10 +1,10 @@
 @echo off
-title HyperSolve - Universal Autonomous Assessment Engine
+title HyperSolve v2.0 - Universal Autonomous Assessment Engine
 color 0b
 cls
 
 echo ===================================================
-echo     HYPERSOLVE - UNIVERSAL ASSESSMENT ENGINE
+echo     HYPERSOLVE v2.0 - ZERO-API-KEY ASSESSMENT ENGINE
 echo ===================================================
 echo.
 

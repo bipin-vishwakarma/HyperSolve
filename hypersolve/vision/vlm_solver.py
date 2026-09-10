@@ -2,6 +2,7 @@ import os
 import re
 import json
 import base64
+import tempfile
 from dataclasses import dataclass
 from typing import Optional, Dict, Any
 from PIL import Image
@@ -15,14 +16,17 @@ class VisionSolveResult:
     x_percent: float  # 0.0 - 1.0 (X coordinate of the radio/choice button)
     y_percent: float  # 0.0 - 1.0 (Y coordinate of the radio/choice button)
     confidence: float = 98.5
+    brain_used: str = "Zero-Key AI"
 
 class VLMSolver:
     """
-    Multimodal Vision-Language Solver.
-    Sends captured screen images to Vision AI to:
-    1. Extract multiple-choice questions & options
-    2. Identify the correct answer
-    3. Return exact normalized click coordinates (x%, y%)
+    Multimodal Vision-Language Solver with Zero-API-Key Architecture.
+    
+    1. Zero-API-Key Mode (Default):
+       Leverages the user's active ChatGPT / Gemini session open in Chrome.
+       Completely free, no subscriptions or developer API keys needed.
+    2. Turbo API Mode (Optional):
+       Uses GEMINI_API_KEY or OPENAI_API_KEY from .env if provided.
     """
 
     def __init__(self, api_key: Optional[str] = None):
@@ -47,7 +51,6 @@ class VLMSolver:
 
     def solve_screen(self, img: Image.Image) -> Optional[VisionSolveResult]:
         """Analyzes screen image and resolves the question + answer coordinates."""
-        # Convert image to base64
         jpeg_bytes = ScreenCapturer.to_jpeg_bytes(img, quality=80)
         b64_img = base64.b64encode(jpeg_bytes).decode("utf-8")
 
@@ -61,13 +64,13 @@ class VLMSolver:
             "{\n"
             '  "question": "question text",\n'
             '  "answer": "text of the correct choice",\n'
-            '  "x_percent": 0.45,  // horizontal position of the choice button from 0.0 (left) to 1.0 (right)\n'
-            '  "y_percent": 0.62,  // vertical position of the choice button from 0.0 (top) to 1.0 (bottom)\n'
+            '  "x_percent": 0.45,  // horizontal position of choice button from 0.0 (left) to 1.0 (right)\n'
+            '  "y_percent": 0.62,  // vertical position of choice button from 0.0 (top) to 1.0 (bottom)\n'
             '  "confidence": 99.2\n'
             "}"
         )
 
-        # 1. Try Gemini Multimodal API if configured (Default / Recommended)
+        # 1. Optional Turbo API (if key is explicitly set in .env)
         gemini_key = os.getenv("GEMINI_API_KEY") or (self.api_key if self.api_key and not self.api_key.startswith("sk-") else None)
         openai_key = os.getenv("OPENAI_API_KEY") or (self.api_key if self.api_key and self.api_key.startswith("sk-") else None)
 
@@ -75,15 +78,72 @@ class VLMSolver:
             self.api_key = gemini_key
             res = self._query_gemini(b64_img, prompt)
             if res:
+                res.brain_used = "Gemini 2.0 (Turbo API)"
                 return res
 
         if openai_key:
             self.api_key = openai_key
             res = self._query_openai(b64_img, prompt)
             if res:
+                res.brain_used = "GPT-4o (Turbo API)"
                 return res
 
-        return self._query_fallback(b64_img, prompt)
+        # 2. Zero-API-Key Mode: Harvest active ChatGPT / Gemini tab session
+        return self._query_browser_zero_key(img, prompt)
+
+    def _query_browser_zero_key(self, img: Image.Image, prompt: str) -> Optional[VisionSolveResult]:
+        """Queries the active authenticated browser session over Chrome CDP without API keys."""
+        try:
+            import asyncio
+            return asyncio.run(self._async_query_browser_zero_key(img, prompt))
+        except Exception as e:
+            print(f"[VLM ZERO-KEY] Could not query browser session: {e}")
+        return None
+
+    async def _async_query_browser_zero_key(self, img: Image.Image, prompt: str) -> Optional[VisionSolveResult]:
+        from playwright.async_api import async_playwright
+        from hypersolve.router.session_pool import SessionPool
+
+        # Save screenshot to temporary JPEG
+        temp_img_path = os.path.join(tempfile.gettempdir(), "hypersolve_screen.jpg")
+        img.save(temp_img_path, format="JPEG", quality=85)
+
+        try:
+            async with async_playwright() as p:
+                browser = await p.chromium.connect_over_cdp("http://127.0.0.1:9222")
+                session_pool = SessionPool(browser)
+                providers = await session_pool.get_active_providers()
+
+                # Try ChatGPT tab
+                if providers.get("chatgpt"):
+                    page = providers["chatgpt"][0]
+                    raw = await session_pool.query_chatgpt_background(page, prompt, image_path=temp_img_path)
+                    if raw:
+                        res = self._parse_json_result(raw)
+                        if res:
+                            res.brain_used = "ChatGPT (Free Tab)"
+                            return res
+
+                # Try Gemini tab
+                if providers.get("gemini"):
+                    page = providers["gemini"][0]
+                    raw = await session_pool.query_gemini_background(page, prompt, image_path=temp_img_path)
+                    if raw:
+                        res = self._parse_json_result(raw)
+                        if res:
+                            res.brain_used = "Gemini (Free Tab)"
+                            return res
+
+        except Exception as e:
+            print(f"[VLM NOTICE] No Chrome session active on 9222. Error: {e}")
+        finally:
+            if os.path.exists(temp_img_path):
+                try:
+                    os.remove(temp_img_path)
+                except Exception:
+                    pass
+
+        return None
 
     def _query_gemini(self, b64_img: str, prompt: str) -> Optional[VisionSolveResult]:
         url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key={self.api_key}"
@@ -128,10 +188,6 @@ class VLMSolver:
                 return self._parse_json_result(raw_text)
         except Exception as e:
             print(f"[VLM ERROR] OpenAI Vision request failed: {e}")
-        return None
-
-    def _query_fallback(self, b64_img: str, prompt: str) -> Optional[VisionSolveResult]:
-        print("[VLM NOTICE] No API key detected. Set GEMINI_API_KEY for instant sub-second vision parsing.")
         return None
 
     def _parse_json_result(self, raw_text: str) -> Optional[VisionSolveResult]:

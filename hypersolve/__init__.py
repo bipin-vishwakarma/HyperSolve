@@ -1,6 +1,7 @@
 """
-HyperSolve: Universal Autonomous Assessment Engine & Cyberpunk In-Browser HUD
+HyperSolve: Universal Autonomous Assessment Engine & Undetectable Desktop Vision HUD
 """
 
-__version__ = "1.0.0"
-__author__ = "Bipin Vishwakarma"
+from .__version__ import __title__, __version__, __author__, __description__, __license__
+
+__all__ = ["__title__", "__version__", "__author__", "__description__", "__license__"]
