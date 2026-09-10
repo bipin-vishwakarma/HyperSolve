@@ -1,142 +1,130 @@
-/* HyperHUD Cyberpunk Isolated Theme */
+/* HyperHUD: Ultra-Sleek Dynamic Island Theme (Minimalist Frosted Glass) */
 :host {
     all: initial;
-    font-family: 'JetBrains Mono', 'Segoe UI', 'Consolas', monospace;
-    font-size: 13px;
-    color: #e0f7fa;
+    font-family: -apple-system, BlinkMacSystemFont, 'Inter', 'Segoe UI', Roboto, sans-serif;
+    font-size: 12px;
+    color: #f1f5f9;
     pointer-events: none;
     z-index: 2147483647;
 }
 
-/* Floating Status Widget */
-.hypersolve-dock {
+/* Floating Dynamic Island Pill (Top Center) */
+.hypersolve-island {
     position: fixed;
-    top: 20px;
-    right: 20px;
-    background: rgba(10, 14, 23, 0.92);
-    border: 1px solid #00f3ff;
-    box-shadow: 0 0 15px rgba(0, 243, 255, 0.4), inset 0 0 10px rgba(0, 243, 255, 0.15);
-    border-radius: 8px;
-    padding: 12px 16px;
-    width: 260px;
+    top: 14px;
+    left: 50%;
+    transform: translateX(-50%);
+    background: rgba(13, 17, 23, 0.85);
+    border: 1px solid rgba(255, 255, 255, 0.12);
+    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.45), 0 0 0 1px rgba(255, 255, 255, 0.05);
+    border-radius: 9999px;
+    padding: 6px 16px;
+    display: inline-flex;
+    align-items: center;
+    gap: 12px;
     pointer-events: auto;
-    backdrop-filter: blur(8px);
-    transition: transform 0.2s ease, opacity 0.2s ease;
+    backdrop-filter: blur(16px);
+    -webkit-backdrop-filter: blur(16px);
+    transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1);
     user-select: none;
+    cursor: default;
+    z-index: 2147483647;
 }
 
-.hypersolve-dock.vanished {
+.hypersolve-island:hover {
+    background: rgba(18, 24, 34, 0.95);
+    border-color: rgba(0, 243, 255, 0.35);
+    box-shadow: 0 12px 36px rgba(0, 0, 0, 0.6), 0 0 16px rgba(0, 243, 255, 0.2);
+}
+
+.hypersolve-island.vanished {
     opacity: 0;
-    transform: translateY(-20px);
+    transform: translateX(-50%) translateY(-24px) scale(0.9);
     pointer-events: none;
 }
 
-.dock-header {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    border-bottom: 1px solid rgba(0, 243, 255, 0.3);
-    padding-bottom: 6px;
-    margin-bottom: 8px;
+/* Status Indicator Dot */
+.island-pulse {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: #10b981;
+    box-shadow: 0 0 8px #10b981;
+    animation: island-dot-pulse 2s infinite;
 }
 
-.dock-title {
+@keyframes island-dot-pulse {
+    0% { transform: scale(0.95); opacity: 0.8; }
+    50% { transform: scale(1.2); opacity: 1; box-shadow: 0 0 12px #10b981; }
+    100% { transform: scale(0.95); opacity: 0.8; }
+}
+
+.island-brand {
     font-weight: 700;
-    letter-spacing: 1.5px;
-    color: #00f3ff;
-    text-shadow: 0 0 8px #00f3ff;
-    font-size: 14px;
-}
-
-.dock-badge {
-    background: rgba(5, 255, 161, 0.15);
-    border: 1px solid #05ffa1;
-    color: #05ffa1;
-    font-size: 10px;
-    padding: 2px 6px;
-    border-radius: 4px;
-    text-transform: uppercase;
-}
-
-.dock-stats {
-    display: flex;
-    flex-direction: column;
-    gap: 4px;
-    font-size: 11px;
-    color: #90caf9;
-}
-
-.stat-row {
-    display: flex;
-    justify-content: space-between;
-}
-
-.stat-val {
+    letter-spacing: 0.5px;
     color: #ffffff;
+    display: flex;
+    align-items: center;
+    gap: 4px;
+}
+
+.island-brand-icon {
+    color: #00f3ff;
+}
+
+.island-divider {
+    width: 1px;
+    height: 14px;
+    background: rgba(255, 255, 255, 0.15);
+}
+
+.island-status {
+    color: #94a3b8;
+    font-size: 11px;
+    font-weight: 500;
+    max-width: 220px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.island-status strong {
+    color: #38bdf8;
     font-weight: 600;
 }
 
-.dock-footer {
-    margin-top: 8px;
-    font-size: 9px;
-    color: #546e7a;
-    text-align: right;
+.island-badge {
+    background: rgba(16, 185, 129, 0.15);
+    color: #34d399;
+    font-size: 10px;
+    font-weight: 600;
+    padding: 2px 8px;
+    border-radius: 9999px;
+    border: 1px solid rgba(16, 185, 129, 0.3);
 }
 
-/* In-Page Scanline Effect on Target Container */
-.hypersolve-scanline-active {
-    position: relative !important;
-    outline: 2px solid #00f3ff !important;
-    box-shadow: 0 0 20px rgba(0, 243, 255, 0.35) !important;
-    transition: outline 0.3s ease;
+/* Question Option Subtle Glow */
+.hypersolve-choice-locked {
+    background: rgba(16, 185, 129, 0.08) !important;
+    border-radius: 8px !important;
+    outline: 1.5px solid #10b981 !important;
+    box-shadow: 0 0 12px rgba(16, 185, 129, 0.2) !important;
+    transition: all 0.25s ease !important;
 }
 
-.hypersolve-scanline-beam {
-    position: absolute;
-    top: 0;
-    left: 0;
-    right: 0;
-    height: 3px;
-    background: linear-gradient(90deg, transparent, #00f3ff, #05ffa1, transparent);
-    box-shadow: 0 0 12px #00f3ff;
-    animation: hypersolve-scan 1.4s ease-in-out infinite;
-    pointer-events: none;
-    z-index: 1000;
-}
-
-@keyframes hypersolve-scan {
-    0% { top: 0%; opacity: 0.8; }
-    50% { top: 98%; opacity: 1; }
-    100% { top: 0%; opacity: 0.8; }
-}
-
-/* In-Page Confidence Badge */
+/* Minimalist Inline Confidence Tag */
 .hypersolve-confidence-pill {
     display: inline-flex;
     align-items: center;
-    gap: 6px;
-    background: rgba(10, 14, 23, 0.88);
-    border: 1px solid #05ffa1;
-    box-shadow: 0 0 10px rgba(5, 255, 161, 0.3);
-    color: #05ffa1;
+    gap: 5px;
+    background: rgba(15, 23, 42, 0.85);
+    border: 1px solid rgba(16, 185, 129, 0.4);
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
+    color: #34d399;
     font-size: 11px;
     font-weight: 600;
-    padding: 3px 10px;
-    border-radius: 12px;
-    margin-bottom: 6px;
-    animation: hypersolve-fade-in 0.4s ease-out;
-}
-
-@keyframes hypersolve-fade-in {
-    from { opacity: 0; transform: translateY(-4px); }
-    to { opacity: 1; transform: translateY(0); }
-}
-
-/* Choice Lock Aura */
-.hypersolve-choice-locked {
-    background: rgba(5, 255, 161, 0.12) !important;
-    border-radius: 6px !important;
-    outline: 1px solid #05ffa1 !important;
-    box-shadow: 0 0 10px rgba(5, 255, 161, 0.25) !important;
-    transition: background 0.3s ease;
+    padding: 2px 8px;
+    border-radius: 6px;
+    margin-bottom: 8px;
+    backdrop-filter: blur(8px);
 }
