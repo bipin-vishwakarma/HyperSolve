@@ -1,0 +1,142 @@
+/* HyperHUD Cyberpunk Isolated Theme */
+:host {
+    all: initial;
+    font-family: 'JetBrains Mono', 'Segoe UI', 'Consolas', monospace;
+    font-size: 13px;
+    color: #e0f7fa;
+    pointer-events: none;
+    z-index: 2147483647;
+}
+
+/* Floating Status Widget */
+.hypersolve-dock {
+    position: fixed;
+    top: 20px;
+    right: 20px;
+    background: rgba(10, 14, 23, 0.92);
+    border: 1px solid #00f3ff;
+    box-shadow: 0 0 15px rgba(0, 243, 255, 0.4), inset 0 0 10px rgba(0, 243, 255, 0.15);
+    border-radius: 8px;
+    padding: 12px 16px;
+    width: 260px;
+    pointer-events: auto;
+    backdrop-filter: blur(8px);
+    transition: transform 0.2s ease, opacity 0.2s ease;
+    user-select: none;
+}
+
+.hypersolve-dock.vanished {
+    opacity: 0;
+    transform: translateY(-20px);
+    pointer-events: none;
+}
+
+.dock-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    border-bottom: 1px solid rgba(0, 243, 255, 0.3);
+    padding-bottom: 6px;
+    margin-bottom: 8px;
+}
+
+.dock-title {
+    font-weight: 700;
+    letter-spacing: 1.5px;
+    color: #00f3ff;
+    text-shadow: 0 0 8px #00f3ff;
+    font-size: 14px;
+}
+
+.dock-badge {
+    background: rgba(5, 255, 161, 0.15);
+    border: 1px solid #05ffa1;
+    color: #05ffa1;
+    font-size: 10px;
+    padding: 2px 6px;
+    border-radius: 4px;
+    text-transform: uppercase;
+}
+
+.dock-stats {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    font-size: 11px;
+    color: #90caf9;
+}
+
+.stat-row {
+    display: flex;
+    justify-content: space-between;
+}
+
+.stat-val {
+    color: #ffffff;
+    font-weight: 600;
+}
+
+.dock-footer {
+    margin-top: 8px;
+    font-size: 9px;
+    color: #546e7a;
+    text-align: right;
+}
+
+/* In-Page Scanline Effect on Target Container */
+.hypersolve-scanline-active {
+    position: relative !important;
+    outline: 2px solid #00f3ff !important;
+    box-shadow: 0 0 20px rgba(0, 243, 255, 0.35) !important;
+    transition: outline 0.3s ease;
+}
+
+.hypersolve-scanline-beam {
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: 3px;
+    background: linear-gradient(90deg, transparent, #00f3ff, #05ffa1, transparent);
+    box-shadow: 0 0 12px #00f3ff;
+    animation: hypersolve-scan 1.4s ease-in-out infinite;
+    pointer-events: none;
+    z-index: 1000;
+}
+
+@keyframes hypersolve-scan {
+    0% { top: 0%; opacity: 0.8; }
+    50% { top: 98%; opacity: 1; }
+    100% { top: 0%; opacity: 0.8; }
+}
+
+/* In-Page Confidence Badge */
+.hypersolve-confidence-pill {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    background: rgba(10, 14, 23, 0.88);
+    border: 1px solid #05ffa1;
+    box-shadow: 0 0 10px rgba(5, 255, 161, 0.3);
+    color: #05ffa1;
+    font-size: 11px;
+    font-weight: 600;
+    padding: 3px 10px;
+    border-radius: 12px;
+    margin-bottom: 6px;
+    animation: hypersolve-fade-in 0.4s ease-out;
+}
+
+@keyframes hypersolve-fade-in {
+    from { opacity: 0; transform: translateY(-4px); }
+    to { opacity: 1; transform: translateY(0); }
+}
+
+/* Choice Lock Aura */
+.hypersolve-choice-locked {
+    background: rgba(5, 255, 161, 0.12) !important;
+    border-radius: 6px !important;
+    outline: 1px solid #05ffa1 !important;
+    box-shadow: 0 0 10px rgba(5, 255, 161, 0.25) !important;
+    transition: background 0.3s ease;
+}
