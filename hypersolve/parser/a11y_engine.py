@@ -8,7 +8,7 @@ class QuizOption:
     index: int
     text: str
     is_checked: bool = False
-    ref_id: Optional[str] = None  # Internal reference or locator selector
+    ref_id: Optional[str] = None
 
 @dataclass
 class QuizQuestion:
@@ -16,144 +16,149 @@ class QuizQuestion:
     text: str
     options: List[QuizOption] = field(default_factory=list)
     is_answered: bool = False
-    dom_id: Optional[str] = None  # Host element identifier for visual HUD targeting
+    dom_id: Optional[str] = None
 
 class UniversalA11yParser:
     """
     Universal Zero-Selector Parser.
-    Extracts structured quiz questions and choices across Moodle, Canvas, 
-    Google Forms, Blackboard, and custom LMS platforms using semantic trees.
+    Extracts structured quiz questions across Moodle, Canvas, Blackboard,
+    Google Forms, Aspirations Institute, and custom portal DOM trees.
     """
 
     @staticmethod
     async def parse_page(page: Page) -> List[QuizQuestion]:
         """
-        Extracts all questions and choices on the current page.
-        Combines Accessibility Tree inspection with semantic DOM clustering.
+        Extracts questions and choices using intelligent container grouping
+        and semantic radio/option extraction without relying on brittle class names.
         """
-        # Execute an in-page universal semantic extractor that doesn't depend on fragile CSS classes
-        extracted_data = await page.evaluate("""() => {
+        extracted_data = await page.evaluate(r"""() => {
             const questions = [];
-            
-            // 1. Identify question containers via semantic indicators
-            // Standard forms, fieldsets, role='radiogroup', or generic question cards
-            const candidates = document.querySelectorAll(
-                'fieldset, [role="radiogroup"], [role="group"], .que, div[data-region="question"], div[role="listitem"]'
-            );
-            
-            let idCounter = 1;
-            
-            // Helper to clean extracted text
-            function cleanText(str) {
-                if (!str) return '';
-                return str.replace(/\\s+/g, ' ').trim();
+
+            // 1. Gather all choice elements: inputs or custom divs with role='radio' or .opt
+            const allRadios = Array.from(document.querySelectorAll(
+                'input[type="radio"], input[type="checkbox"], [role="radio"], .opt, [class*="option-item"]'
+            )).filter(el => {
+                // Filter out invisible elements
+                const rect = el.getBoundingClientRect();
+                return rect.width > 0 && rect.height > 0;
+            });
+
+            if (allRadios.length === 0) return [];
+
+            // 2. Group options by their parent question card or container
+            const containerMap = new Map();
+            for (const r of allRadios) {
+                const container = r.closest(
+                    'section.qcard, .qcard, .que, fieldset, [role="radiogroup"], [role="group"], div.question, div[data-region="question"]'
+                ) || r.parentElement.parentElement;
+
+                if (!containerMap.has(container)) {
+                    containerMap.set(container, []);
+                }
+                containerMap.get(container).push(r);
             }
 
-            // If explicit semantic containers are found, parse them
-            const targetContainers = candidates.length > 0 ? Array.from(candidates) : [document.body];
-            
-            for (const container of targetContainers) {
-                // Look for radio or checkbox inputs within this container
-                const inputs = Array.from(container.querySelectorAll('input[type="radio"], input[type="checkbox"], [role="radio"]'));
-                if (inputs.length === 0) continue;
-                
-                // Determine container question text
-                let questionText = '';
-                
-                // Try legend or aria-labelledby or heading
-                const legend = container.querySelector('legend, [role="heading"], h1, h2, h3, h4, h5, .qtext, .question_text');
-                if (legend) {
-                    questionText = cleanText(legend.innerText || legend.textContent);
-                } else if (container.hasAttribute('aria-label')) {
-                    questionText = cleanText(container.getAttribute('aria-label'));
+            function cleanText(str) {
+                if (!str) return '';
+                return str.replace(/\s+/g, ' ').trim();
+            }
+
+            let qId = 1;
+            for (const [container, inputs] of containerMap.entries()) {
+                if (inputs.length < 2) continue; // Not a multiple choice group
+
+                // A. Extract question text
+                let qText = '';
+                const qTextEl = container.querySelector(
+                    '.qtext, .question_text, legend, h1, h2, h3, h4, [role="heading"], .prompt'
+                );
+
+                if (qTextEl && cleanText(qTextEl.innerText).length > 5) {
+                    qText = cleanText(qTextEl.innerText);
                 } else {
-                    // Fallback: extract text above the first radio input
+                    // Fallback: examine text in container before the first option
                     const firstInput = inputs[0];
-                    let prevNode = firstInput.parentElement;
-                    while (prevNode && prevNode !== container) {
-                        if (prevNode.innerText && prevNode.innerText.length > 10) {
-                            questionText = cleanText(prevNode.innerText);
-                            break;
+                    let textParts = [];
+                    for (const node of container.childNodes) {
+                        if (node.contains && node.contains(firstInput)) break;
+                        if (node.innerText) textParts.push(cleanText(node.innerText));
+                        else if (node.nodeType === Node.TEXT_NODE && node.textContent.trim()) {
+                            textParts.push(cleanText(node.textContent));
                         }
-                        prevNode = prevNode.previousElementSibling || prevNode.parentElement;
                     }
-                }
-                
-                if (!questionText || questionText.length < 5) {
-                    // Last resort: extract container's text excluding option labels
-                    questionText = `Question ${idCounter}`;
+                    qText = textParts.join(' ').trim();
                 }
 
-                // Clean up question text if it begins with Question metadata
-                questionText = questionText.replace(/^Question\\s*\\d+[:.]?\\s*/i, '');
-
-                // Assign or read a unique ID attribute for HUD targeting
-                let hostId = container.id;
-                if (!hostId) {
-                    hostId = `__hypersolve_q_${idCounter}`;
-                    container.setAttribute('data-hypersolve-id', hostId);
+                if (!qText || qText.length < 4) {
+                    qText = `Question ${qId}`;
                 }
 
-                // Extract options
+                // Strip question numbering prefixes like "Q1 / 25", "1. ", "Question 1:"
+                qText = qText.replace(/^(Q\s*\d+\s*[\/:.]?\s*\d*|Question\s*\d+[:.]?|\d+[.)])\s*/i, '').trim();
+
+                // Tag container for visual HUD scanline beam
+                let domId = container.getAttribute('data-hypersolve-id');
+                if (!domId) {
+                    domId = `__hypersolve_q_${qId}`;
+                    container.setAttribute('data-hypersolve-id', domId);
+                }
+
+                // B. Extract options
                 const options = [];
                 let isAnswered = false;
 
-                inputs.forEach((input, optIdx) => {
+                inputs.forEach((input, idx) => {
                     let isChecked = false;
                     if (input.tagName === 'INPUT') {
                         isChecked = input.checked;
-                    } else if (input.getAttribute('aria-checked') === 'true') {
-                        isChecked = true;
+                    } else {
+                        isChecked = input.getAttribute('aria-checked') === 'true' ||
+                                    input.classList.contains('sel') ||
+                                    input.classList.contains('selected') ||
+                                    input.classList.contains('checked');
                     }
                     if (isChecked) isAnswered = true;
 
-                    // Locate option text
+                    // Option text extraction
                     let optText = '';
-                    let label = null;
-                    if (input.id) {
-                        label = document.querySelector(`label[for="${input.id}"]`);
-                    }
-                    if (!label) {
-                        label = input.closest('label') || input.parentElement;
-                    }
-
-                    if (label) {
-                        // Clone label to remove input text itself if nested
-                        const clone = label.cloneNode(true);
-                        const nestedInput = clone.querySelector('input');
-                        if (nestedInput) nestedInput.remove();
-                        optText = cleanText(clone.innerText || clone.textContent);
-                    }
-
-                    if (!optText) {
-                        optText = cleanText(input.getAttribute('aria-label') || input.value || `Option ${optIdx + 1}`);
+                    if (input.tagName === 'INPUT') {
+                        let label = null;
+                        if (input.id) label = document.querySelector(`label[for="${input.id}"]`);
+                        if (!label) label = input.closest('label') || input.parentElement;
+                        if (label) {
+                            const clone = label.cloneNode(true);
+                            const nested = clone.querySelector('input');
+                            if (nested) nested.remove();
+                            optText = cleanText(clone.innerText || clone.textContent);
+                        }
+                    } else {
+                        // Custom div or span option
+                        optText = cleanText(input.innerText || input.textContent);
                     }
 
-                    // Remove leading choice markers like "a. ", "b) ", etc.
-                    optText = optText.replace(/^[a-dA-D][.)\\s-]+\\s*/, '').trim();
+                    // Clean choice markers like "A\nbecause" or "A. because" or "(A) because"
+                    let cleanedOpt = optText.replace(/^(\([A-Za-z0-9]\)|[A-Za-z0-9][.)\-:]+)\s*/i, '').trim();
+                    if (!cleanedOpt) cleanedOpt = optText;
 
                     // Tag input for targeted injection
-                    const inputMarker = `__hypersolve_opt_${idCounter}_${optIdx}`;
-                    input.setAttribute('data-hypersolve-opt', inputMarker);
+                    const refId = `__hypersolve_opt_${qId}_${idx}`;
+                    input.setAttribute('data-hypersolve-opt', refId);
 
                     options.push({
-                        index: optIdx,
-                        text: optText,
+                        index: idx,
+                        text: cleanedOpt,
                         is_checked: isChecked,
-                        ref_id: inputMarker
+                        ref_id: refId
                     });
                 });
 
-                if (options.length > 1) {
-                    questions.push({
-                        id: idCounter,
-                        text: questionText,
-                        dom_id: hostId,
-                        is_answered: isAnswered,
-                        options: options
-                    });
-                    idCounter++;
-                }
+                questions.push({
+                    id: qId++,
+                    text: qText,
+                    dom_id: domId,
+                    is_answered: isAnswered,
+                    options: options
+                });
             }
 
             return questions;
