@@ -1,12 +1,16 @@
 $ErrorActionPreference = 'Stop'
 $ProjectRoot = Split-Path -Parent $PSScriptRoot
+$OriginalPath = $env:PATH
+$PythonRoot = Split-Path -Parent (Get-Command python).Source
 Push-Location $ProjectRoot
 try {
+    # Prevent unrelated tools on the development PATH from supplying Qt DLLs.
+    $env:PATH = "$PythonRoot;$PythonRoot\Scripts;$env:SystemRoot\System32;$env:SystemRoot"
     python -m unittest discover -s tests -v
     if ($LASTEXITCODE -ne 0) { throw 'Tests failed' }
     python scripts/build_icon.py
     if ($LASTEXITCODE -ne 0) { throw 'Icon build failed' }
-    python -m PyInstaller installer/hypersolve.spec --noconfirm --distpath dist --workpath build
+    python -m PyInstaller installer/hypersolve.spec --noconfirm --clean --distpath dist --workpath build
     if ($LASTEXITCODE -ne 0) { throw 'Executable build failed' }
     $CompilerCandidates = @(
         "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe",
@@ -18,4 +22,7 @@ try {
     if ($LASTEXITCODE -ne 0) { throw 'Installer build failed' }
     python scripts/release_manifest.py
     if ($LASTEXITCODE -ne 0) { throw 'Manifest generation failed' }
-} finally { Pop-Location }
+} finally {
+    $env:PATH = $OriginalPath
+    Pop-Location
+}
