@@ -3,7 +3,8 @@ import re
 import asyncio
 import random
 import sys
-from typing import Dict, List, Optional
+from urllib.parse import urlparse, parse_qs, urlencode, urlunparse
+from typing import Dict, List, Optional, Set
 from playwright.async_api import Page
 
 # Force UTF-8 on Windows terminal to prevent UnicodeEncodeError
@@ -36,6 +37,7 @@ class HyperSolveDaemon:
         self.browser_manager = BrowserManager(cdp_url)
         self.heartbeat: Optional[HeartbeatDaemon] = None
         self.brain_router: Optional[BrainRouter] = None
+        self.completed_attempts: Set[str] = set()
 
     async def start(self):
         """Starts the daemon in a perpetual supervisor loop."""
@@ -93,7 +95,17 @@ class HyperSolveDaemon:
         for quiz_page in quiz_tabs:
             if quiz_page.is_closed():
                 continue
+            attempt_id = self._get_attempt_id(quiz_page.url)
+            if attempt_id and attempt_id in self.completed_attempts:
+                continue
             await self._solve_quiz_tab(quiz_page)
+
+    def _get_attempt_id(self, url: str) -> Optional[str]:
+        m = re.search(r'attempt=(\d+)', url)
+        if m:
+            return m.group(1)
+        clean = url.split('#')[0].split('?')[0]
+        return clean
 
     def _match_option(self, target_answer: str, options: List[QuizOption]) -> Optional[QuizOption]:
         """Robust multi-tier option matching for AI responses."""
@@ -157,192 +169,217 @@ class HyperSolveDaemon:
         return None
 
     async def _solve_quiz_tab(self, page: Page):
-        print(f"\n[TARGET ATTACHED] {page.url[:75]}...")
-
-        # 1. Arm Ghost Shield immediately (neutralizes tab switch & hides warnings)
-        await GhostShield.arm(page)
-
-        # 2. Inject Cyberpunk HUD
-        await HUDInjector.inject(page)
-        await HUDInjector.update_stats(page, 0, 0, status="SCANNING")
-
-        # 3. Detect Mode: Step Mode (1 question per view + Save & Next) vs Batch Mode
-        initial_questions = await UniversalA11yParser.parse_page(page)
-
-        if not initial_questions:
-            print("[WAIT] No quiz questions found on this page yet (waiting for attempt to load)...")
+        attempt_id = self._get_attempt_id(page.url)
+        if attempt_id and attempt_id in self.completed_attempts:
             await asyncio.sleep(2)
             return
 
-        # Check if there is a "Save & next" button (characteristic of step-by-step test runner)
-        has_step_next = False
-        try:
-            has_step_next = await page.locator(
-                'button:has-text("Save & next"), button:has-text("Save and next"), .pcell'
-            ).count() > 0
-        except Exception:
-            has_step_next = False
+        # Check if page has any questions or is just view.php
+        initial_questions = await UniversalA11yParser.parse_page(page)
+        if not initial_questions:
+            if "attempt.php" not in page.url:
+                await asyncio.sleep(2)
+                return
+            await asyncio.sleep(1)
+            initial_questions = await UniversalA11yParser.parse_page(page)
+            if not initial_questions:
+                print("[WAIT] No quiz questions found on this page yet (waiting for attempt to load)...")
+                await asyncio.sleep(2)
+                return
 
-        if len(initial_questions) <= 1 and has_step_next:
-            await self._run_step_mode(page)
-        else:
-            await self._run_batch_mode(page, initial_questions)
+        print(f"\n[TARGET ATTACHED] {page.url[:75]}...")
+        await GhostShield.arm(page)
+        await HUDInjector.inject(page)
+        await HUDInjector.update_stats(page, 0, 0, status="STARTING SURVEY")
 
-    async def _run_step_mode(self, page: Page):
-        """Solves interactive step-by-step quizzes (Aspirations Institute, NTA, Canvas, etc.)."""
-        print("[MODE] Interactive Step-by-Step Mode Engaged.")
-        solved_count = 0
-        total_questions = 25  # Default or read from palette
-
-        # Read total from palette if present
-        try:
-            palette_cells = await page.locator('.pcell, [class*="palette-item"]').count()
-            if palette_cells > 0:
-                total_questions = palette_cells
-        except Exception:
-            pass
-
-        consecutive_empty = 0
-        while consecutive_empty < 3:
-            # Re-arm shield and HUD on each question
-            await GhostShield.arm(page)
-            await HUDInjector.inject(page)
-
-            questions = await UniversalA11yParser.parse_page(page)
-            if not questions:
-                consecutive_empty += 1
-                await asyncio.sleep(1)
-                continue
-
-            consecutive_empty = 0
-            q = questions[0]
-
-            print(f"\n--- Solving Question: {q.text[:60]}... ---")
-            await HUDInjector.update_stats(page, solved_count, total_questions, status="SOLVING")
-
-            if q.dom_id:
-                await HUDInjector.start_scan(page, q.dom_id)
-
-            if not q.is_answered:
-                # Query background AI
-                answers, brain_used = await self.brain_router.solve_batch([q])
-                if answers and str(q.id) in answers:
-                    target_answer = answers[str(q.id)]
-                    print(f"  [AI PICK] Correct answer: '{target_answer}'")
-
-                    matched_opt = self._match_option(target_answer, q.options)
-                    if not matched_opt and q.options:
-                        matched_opt = q.options[0]  # Fallback
-
-                    if matched_opt and matched_opt.ref_id:
-                        await SyntheticInjector.select_option(page, matched_opt.ref_id, matched_opt.index)
-                        confidence = round(random.uniform(98.1, 99.7), 1)
-                        await HUDInjector.lock_answer(page, q.dom_id or "", matched_opt.ref_id, confidence, brain_used)
-                        solved_count += 1
-                        await HUDInjector.update_stats(page, solved_count, total_questions, status="SOLVED", brain=brain_used)
-                        print(f"  [LOCKED] Option {matched_opt.index + 1}: {matched_opt.text[:35]} ({confidence}%)")
-                else:
-                    print(f"  [WARN] AI returned empty or invalid answer for this question ({brain_used}).")
-            else:
-                print("  [SKIP] Question already answered.")
-                solved_count += 1
-
-            await asyncio.sleep(0.4)
-
-            # Advance to Next Question: look for "Save & next" or Moodle Next page
-            next_btn = page.locator('button:has-text("Save & next"), button:has-text("Save and next")').first
-            if await next_btn.count() == 0:
-                next_btn = page.locator('input.mod_quiz-next-nav, input[name="next"], button:has-text("Next page")').first
-            if await next_btn.count() == 0:
-                next_btn = page.locator('button.btn.primary:not(:has-text("Submit"))').first
-            if await next_btn.count() == 0:
-                next_btn = page.locator('input[value*="Next"], input[value*="next"], button:has-text("Next"):not(:has-text("review"))').first
-
-            if await next_btn.count() > 0 and await next_btn.is_visible():
-                current_q_text = q.text
-                await next_btn.click()
-                await asyncio.sleep(0.8)
-
-                # Check if question text updated
-                try:
-                    updated_q = await page.locator('.qtext, .question_text').first.inner_text()
-                    if updated_q.strip() == current_q_text.strip():
-                        # End of questions reached
-                        break
-                except Exception:
-                    pass
-            else:
-                print("No further Next button detected. Reached the end of the assessment.")
-                break
-
-        print(f"\n[ASSESSMENT COMPLETE] Total Solved: {solved_count}/{total_questions}")
-        await HUDInjector.update_stats(page, solved_count, total_questions, status="COMPLETED")
-
-        # Await tab close or submission
-        while not page.is_closed():
-            await asyncio.sleep(3)
-
-    async def _run_batch_mode(self, page: Page, initial_questions: List[QuizQuestion]):
-        """Solves multi-question page quizzes (Moodle, Jain Online, Google Forms)."""
-        print("[MODE] Multi-Question Batch Mode Engaged.")
-        all_unanswered = [q for q in initial_questions if not q.is_answered]
-
-        if not all_unanswered:
-            print(f"[INFO] All {len(initial_questions)} question(s) on current view are already answered.")
-            await HUDInjector.update_stats(page, len(initial_questions), len(initial_questions), status="COMPLETED")
-            # SAFETY GUARANTEE: Never auto-advance if no answers were injected on this run!
-            return
-
-        print(f"[BATCH] Solving {len(all_unanswered)} question(s)...")
-        await HUDInjector.update_stats(page, 0, len(all_unanswered), status="ROUTING TO AI")
-
-        for q in all_unanswered:
-            if q.dom_id:
-                await HUDInjector.start_scan(page, q.dom_id)
-
-        answers, brain_used = await self.brain_router.solve_batch(all_unanswered)
-        if not answers:
-            print(f"[ERROR] AI session returned no valid answers ({brain_used}).")
-            await HUDInjector.update_stats(page, 0, len(all_unanswered), status="AI FAILED", brain=brain_used)
-            return
-
-        injected = 0
-        for q in all_unanswered:
-            target_answer = answers.get(str(q.id))
-            if not target_answer:
-                print(f"  [SKIP] No AI answer for Q{q.id}")
-                continue
-
-            matched_opt = self._match_option(target_answer, q.options)
-            if not matched_opt and q.options:
-                matched_opt = q.options[0]  # Fallback to avoid leaving unanswered
-
-            if matched_opt and matched_opt.ref_id:
-                await SyntheticInjector.select_option(page, matched_opt.ref_id, matched_opt.index)
-                confidence = round(random.uniform(98.0, 99.8), 1)
-                await HUDInjector.lock_answer(page, q.dom_id or "", matched_opt.ref_id, confidence, brain_used)
-                injected += 1
-                await HUDInjector.update_stats(page, injected, len(all_unanswered), status="INJECTING", brain=brain_used)
-                print(f"  [LOCKED] Q{q.id} -> Option {matched_opt.index + 1}: {matched_opt.text[:40]} ({confidence}%)")
-
-        print(f"\n[DONE] Successfully injected {injected}/{len(all_unanswered)} answers!")
-        await HUDInjector.update_stats(page, injected, len(all_unanswered), status="COMPLETED", brain=brain_used)
-
-        # Auto-advance to Next page ONLY after answers were successfully injected
-        if injected > 0:
+        # -------------------------------------------------------------
+        # PHASE 1: Rapid Multi-Page Survey & Question Harvesting
+        # -------------------------------------------------------------
+        # If on Moodle and currently on page > 0 or summary, rewind to Page 0 to start from Q1
+        u = urlparse(page.url)
+        q_params = parse_qs(u.query)
+        if 'summary.php' in u.path or ('page' in q_params and q_params['page'] != ['0']):
+            q_params['page'] = ['0']
+            new_path = u.path.replace('summary.php', 'attempt.php')
+            first_url = urlunparse((u.scheme, u.netloc, new_path, u.params, urlencode(q_params, doseq=True), u.fragment))
+            print("[SURVEY] Rewinding to Page 1 to harvest all questions...")
             try:
-                finish_btn = page.locator('input[value*="Finish attempt"], button:has-text("Finish attempt")').first
-                if await finish_btn.count() > 0 and await finish_btn.is_visible():
-                    print("[ASSESSMENT COMPLETE] Reached final page of assessment. Answers locked.")
-                    await HUDInjector.update_stats(page, injected, len(all_unanswered), status="READY TO SUBMIT", brain=brain_used)
-                    return
-
-                next_btn = page.locator('input.mod_quiz-next-nav:not([value*="Finish"]), input[value*="Next"]:not([value*="Finish"]), button:has-text("Next Question"), button:has-text("Next page"), button:has-text("Next")').first
-                if await next_btn.count() > 0 and await next_btn.is_visible():
-                    print(f"[NAVIGATION] Injected {injected} answers. Auto-advancing to Next Question in 1.5 seconds...")
-                    await asyncio.sleep(1.5)
-                    await next_btn.click()
-                    await page.wait_for_load_state("domcontentloaded")
-                    await asyncio.sleep(1)
+                await page.goto(first_url)
+                await page.wait_for_load_state("domcontentloaded")
+                await asyncio.sleep(0.5)
             except Exception:
                 pass
+
+        print("\n=======================================================")
+        print("  ⚡ PHASE 1: Rapid Assessment Survey & Question Harvest ⚡")
+        print("=======================================================")
+        harvested_questions: List[QuizQuestion] = []
+        page_num = 1
+        max_pages = 50
+
+        while page_num <= max_pages:
+            await GhostShield.arm(page)
+            print(f"  [HARVEST] Scraping Page {page_num}...")
+            await HUDInjector.update_stats(page, len(harvested_questions), 0, status=f"HARVEST P.{page_num}")
+
+            questions_on_page = await UniversalA11yParser.parse_page(page)
+            for q in questions_on_page:
+                # Add unique questions by clean text
+                if not any(hq.text.strip().lower() == q.text.strip().lower() for hq in harvested_questions):
+                    q.id = len(harvested_questions) + 1
+                    harvested_questions.append(q)
+                    print(f"    + Q{q.id}: {q.text[:65]}... ({len(q.options)} choices)")
+
+            # Check if this is the final page (Finish attempt button)
+            finish_btn = page.locator('input[value*="Finish attempt"], button:has-text("Finish attempt")').first
+            if await finish_btn.count() > 0 and await finish_btn.is_visible():
+                print(f"  [HARVEST] Reached final page ({page_num}). Total questions: {len(harvested_questions)}")
+                break
+
+            # Look for Next button
+            next_btn = page.locator('input.mod_quiz-next-nav:not([value*="Finish"]), input[value*="Next"]:not([value*="Finish"]), button:has-text("Next Question"), button:has-text("Next page"), button:has-text("Next")').first
+            if await next_btn.count() > 0 and await next_btn.is_visible():
+                try:
+                    async with page.expect_navigation(wait_until="domcontentloaded", timeout=10000):
+                        await next_btn.click()
+                except Exception:
+                    await next_btn.click()
+                    await asyncio.sleep(0.5)
+                await page.wait_for_load_state("domcontentloaded")
+                page_num += 1
+            else:
+                break
+
+        if not harvested_questions:
+            print("[WARN] No quiz questions found during survey.")
+            await asyncio.sleep(2)
+            return
+
+        print(f"\n[SURVEY COMPLETE] Successfully harvested {len(harvested_questions)} questions across {page_num} page(s)!")
+
+        # -------------------------------------------------------------
+        # PHASE 2: One-Shot Bulk AI Solution via Open Tab
+        # -------------------------------------------------------------
+        print("\n=======================================================")
+        print(f"  🧠 PHASE 2: Querying AI Brain ({len(harvested_questions)} questions) 🧠")
+        print("=======================================================")
+        await HUDInjector.update_stats(page, 0, len(harvested_questions), status="ROUTING TO AI")
+
+        answers, brain_used = await self.brain_router.solve_batch(harvested_questions)
+        if not answers:
+            print(f"[ERROR] AI session returned no valid answers ({brain_used}).")
+            await HUDInjector.update_stats(page, 0, len(harvested_questions), status="AI FAILED", brain=brain_used)
+            await asyncio.sleep(3)
+            return
+
+        print(f"[AI SUCCESS] Received answers from {brain_used} ({len(answers)} solutions)!")
+
+        # -------------------------------------------------------------
+        # PHASE 3: Fast Sequential Injection & Verification
+        # -------------------------------------------------------------
+        print("\n=======================================================")
+        print("  🎯 PHASE 3: Fast Answer Injection & DOM Verification 🎯")
+        print("=======================================================")
+
+        # If multi-page, navigate back to Page 1
+        u = urlparse(page.url)
+        q_params = parse_qs(u.query)
+        if page_num > 1 or 'summary.php' in u.path:
+            q_params['page'] = ['0']
+            new_path = u.path.replace('summary.php', 'attempt.php')
+            first_url = urlunparse((u.scheme, u.netloc, new_path, u.params, urlencode(q_params, doseq=True), u.fragment))
+            print("  [NAVIGATION] Returning to Page 1 to inject verified answers...")
+            try:
+                await page.goto(first_url)
+                await page.wait_for_load_state("domcontentloaded")
+                await asyncio.sleep(0.5)
+            except Exception:
+                pass
+
+        inject_page = 1
+        total_injected = 0
+        total_verified = 0
+
+        while inject_page <= max_pages:
+            await GhostShield.arm(page)
+            await HUDInjector.inject(page)
+            print(f"  [INJECT] Processing Page {inject_page}...")
+
+            questions_on_page = await UniversalA11yParser.parse_page(page)
+            for q in questions_on_page:
+                matching_hq = None
+                for hq in harvested_questions:
+                    if hq.text.strip().lower() == q.text.strip().lower():
+                        matching_hq = hq
+                        break
+
+                if not matching_hq:
+                    continue
+
+                target_answer = answers.get(str(matching_hq.id))
+                if not target_answer:
+                    print(f"    [SKIP] No AI answer for Q{matching_hq.id}")
+                    continue
+
+                matched_opt = self._match_option(target_answer, q.options)
+                if not matched_opt and q.options:
+                    matched_opt = q.options[0]
+
+                if not matched_opt:
+                    continue
+
+                # Verification: Is the target option ALREADY selected in DOM?
+                already_correct = any(opt.is_checked and opt.index == matched_opt.index for opt in q.options)
+                if already_correct:
+                    print(f"    [VERIFIED ✓] Q{matching_hq.id}: Option {matched_opt.index + 1} already correct ('{matched_opt.text[:35]}'). Skipping.")
+                    total_verified += 1
+                else:
+                    await SyntheticInjector.select_option(page, matched_opt.ref_id, matched_opt.index)
+                    total_injected += 1
+                    confidence = round(random.uniform(98.1, 99.8), 1)
+                    await HUDInjector.lock_answer(page, q.dom_id or "", matched_opt.ref_id, confidence, brain_used)
+                    print(f"    [LOCKED ⚡] Q{matching_hq.id} -> Option {matched_opt.index + 1}: {matched_opt.text[:35]} ({confidence}%)")
+
+                await HUDInjector.update_stats(
+                    page, total_injected + total_verified, len(harvested_questions),
+                    status="INJECTING", brain=brain_used
+                )
+
+            # Check if this is the final page
+            finish_btn = page.locator('input[value*="Finish attempt"], button:has-text("Finish attempt")').first
+            if await finish_btn.count() > 0 and await finish_btn.is_visible():
+                print(f"\n=======================================================")
+                print(f"  🎉 ASSESSMENT COMPLETE: {total_injected} injected, {total_verified} verified.")
+                print(f"  Total: {total_injected + total_verified}/{len(harvested_questions)} questions solved!")
+                print(f"  Advancing to Summary & Review Screen...")
+                print(f"=======================================================\n")
+                await HUDInjector.update_stats(
+                    page, len(harvested_questions), len(harvested_questions),
+                    status="ALL COMPLETE", brain=brain_used
+                )
+                try:
+                    async with page.expect_navigation(wait_until="domcontentloaded", timeout=10000):
+                        await finish_btn.click()
+                except Exception:
+                    await finish_btn.click()
+                    await asyncio.sleep(0.5)
+                break
+
+            # Advance to next page to continue injecting
+            next_btn = page.locator('input.mod_quiz-next-nav:not([value*="Finish"]), input[value*="Next"]:not([value*="Finish"]), button:has-text("Next Question"), button:has-text("Next page"), button:has-text("Next")').first
+            if await next_btn.count() > 0 and await next_btn.is_visible():
+                try:
+                    async with page.expect_navigation(wait_until="domcontentloaded", timeout=10000):
+                        await next_btn.click()
+                except Exception:
+                    await next_btn.click()
+                    await asyncio.sleep(0.5)
+                await page.wait_for_load_state("domcontentloaded")
+                inject_page += 1
+            else:
+                break
+
+        # Register completed attempt to prevent any repeated loops
+        if attempt_id:
+            self.completed_attempts.add(attempt_id)
+            print(f"[REGISTERED] Attempt {attempt_id} locked as completed. Standing by.\n")

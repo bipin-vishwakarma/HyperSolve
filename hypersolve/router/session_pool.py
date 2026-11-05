@@ -34,11 +34,12 @@ class SessionPool:
         return providers
 
     async def query_chatgpt_background(
-        self, page: Page, prompt: str, image_path: Optional[str] = None, timeout_seconds: int = 120
+        self, page: Page, prompt: str, image_path: Optional[str] = None, timeout_seconds: int = 120, expected_count: int = 1
     ) -> Optional[str]:
         """
         Executes a prompt query against a background ChatGPT tab WITHOUT bringing it to front.
         Optionally attaches an image/screenshot without requiring OpenAI Vision API keys.
+        Waits for full batch JSON completion when expected_count > 1.
         """
         try:
             # Dismiss any blocking welcome modals or cookies
@@ -59,8 +60,11 @@ class SessionPool:
 
             await textarea.first.wait_for(state='visible', timeout=8000)
 
-            # Record existing assistant messages before sending
-            initial_count = await page.locator('[data-message-author-role="assistant"]').count()
+            # Record existing assistant turns before sending prompt
+            initial_count = await page.evaluate(r"""() => {
+                const els = document.querySelectorAll('[class*="DilResponseRoot"], [class*="response-root"], [data-message-author-role="assistant"], div.markdown');
+                return els.length;
+            }""")
 
             # Optional image upload via file input
             if image_path and os.path.isfile(image_path):
@@ -82,20 +86,23 @@ class SessionPool:
             else:
                 await target_editor.press('Enter')
 
-            # Wait for generation to start (stop button appears OR message count increments)
+            # Wait for generation to start
             stop_selector = 'button[data-testid="stop-button"], button[aria-label*="Stop" i]'
             generation_active = False
-            for _ in range(10):
+            for _ in range(12):
                 await asyncio.sleep(0.5)
                 if await page.locator(stop_selector).count() > 0:
                     generation_active = True
                     break
-                curr_count = await page.locator('[data-message-author-role="assistant"]').count()
+                curr_count = await page.evaluate(r"""() => {
+                    const els = document.querySelectorAll('[class*="DilResponseRoot"], [class*="response-root"], [data-message-author-role="assistant"], div.markdown');
+                    return els.length;
+                }""")
                 if curr_count > initial_count:
                     generation_active = True
                     break
 
-            # Wait for stop button to disappear
+            # Wait for stop button to disappear if generation is underway
             if generation_active:
                 try:
                     await page.wait_for_selector(
@@ -106,11 +113,13 @@ class SessionPool:
                 except Exception:
                     pass
 
-            # Poll until text stabilizes or valid JSON is found
+            # Poll until full batch JSON is found or response stabilizes
             last_text = ""
             stable_ticks = 0
             start_t = asyncio.get_event_loop().time()
             while (asyncio.get_event_loop().time() - start_t) < timeout_seconds:
+                is_still_generating = await page.locator(stop_selector).count() > 0
+
                 txt = await page.evaluate(r"""() => {
                     const selectors = [
                         '[class*="DilResponseRoot"]',
@@ -132,18 +141,31 @@ class SessionPool:
                     }
                     return null;
                 }""")
+
                 if txt:
                     clean_txt = txt.strip()
-                    # If valid JSON is detected, return immediately!
-                    if "{" in clean_txt and "}" in clean_txt:
-                        return clean_txt
-                    if clean_txt == last_text:
-                        stable_ticks += 1
-                        if stable_ticks >= 2:
-                            return clean_txt
-                    else:
-                        stable_ticks = 0
-                        last_text = clean_txt
+                    # Check if valid JSON contains all expected question keys
+                    if expected_count > 0:
+                        json_match = re.search(r'\{[\s\S]*\}', clean_txt)
+                        if json_match:
+                            try:
+                                cleaned = re.sub(r',\s*\}', '}', json_match.group(0))
+                                parsed = json.loads(cleaned)
+                                if isinstance(parsed, dict) and len(parsed) >= expected_count:
+                                    return clean_txt
+                            except Exception:
+                                pass
+
+                    # If generation is no longer active, wait for text stabilization
+                    if not is_still_generating:
+                        if clean_txt == last_text:
+                            stable_ticks += 1
+                            if stable_ticks >= 2:
+                                return clean_txt
+                        else:
+                            stable_ticks = 0
+                            last_text = clean_txt
+
                 await asyncio.sleep(0.5)
 
             if last_text:
@@ -156,10 +178,11 @@ class SessionPool:
         return None
 
     async def query_gemini_background(
-        self, page: Page, prompt: str, image_path: Optional[str] = None, timeout_seconds: int = 120
+        self, page: Page, prompt: str, image_path: Optional[str] = None, timeout_seconds: int = 120, expected_count: int = 1
     ) -> Optional[str]:
         """
         Executes a prompt query against a background Google Gemini tab WITHOUT stealing focus.
+        Waits for full batch JSON completion when expected_count > 1.
         """
         try:
             editor_selectors = [
@@ -217,7 +240,7 @@ class SessionPool:
             except Exception:
                 pass
 
-            # Extract response text once stable
+            # Extract response text once stable or full JSON found
             response_selectors = [
                 'message-content',
                 '.model-response-text',
@@ -232,6 +255,17 @@ class SessionPool:
                     elements = await page.locator(r_sel).all()
                     if elements:
                         txt = (await elements[-1].inner_text()).strip()
+                        if expected_count > 0:
+                            json_match = re.search(r'\{[\s\S]*\}', txt)
+                            if json_match:
+                                try:
+                                    cleaned = re.sub(r',\s*\}', '}', json_match.group(0))
+                                    parsed = json.loads(cleaned)
+                                    if isinstance(parsed, dict) and len(parsed) >= expected_count:
+                                        return txt
+                                except Exception:
+                                    pass
+
                         if txt and txt == last_text:
                             stable_ticks += 1
                             if stable_ticks >= 2:

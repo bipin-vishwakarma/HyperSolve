@@ -107,7 +107,7 @@ class BrainRouter:
                 chat_tab = providers["chatgpt"][0]
                 for attempt in range(max_attempts):
                     raw = await self.session_pool.query_chatgpt_background(
-                        chat_tab, prompt, timeout_seconds=timeout_dynamic
+                        chat_tab, prompt, timeout_seconds=timeout_dynamic, expected_count=len(questions)
                     )
                     if raw:
                         ans = self.extract_answers_json(raw, len(questions))
@@ -119,7 +119,7 @@ class BrainRouter:
                 gemini_tab = providers["gemini"][0]
                 for attempt in range(max_attempts):
                     raw = await self.session_pool.query_gemini_background(
-                        gemini_tab, prompt, timeout_seconds=timeout_dynamic
+                        gemini_tab, prompt, timeout_seconds=timeout_dynamic, expected_count=len(questions)
                     )
                     if raw:
                         ans = self.extract_answers_json(raw, len(questions))
