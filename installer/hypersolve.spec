@@ -26,6 +26,7 @@ a = Analysis(
         'hypersolve.hud.injector',
         'hypersolve.updater.engine',
         'hypersolve.desktop.tray',
+        'hypersolve.desktop.dashboard_window',
         'PyQt6',
         'PyQt6.QtWidgets',
         'PyQt6.QtGui',
