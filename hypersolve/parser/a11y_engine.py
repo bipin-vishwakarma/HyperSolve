@@ -136,7 +136,13 @@ class UniversalA11yParser:
                         if (isChecked) isAnswered = true;
 
                         let label = null;
-                        if (input.id) label = document.querySelector(`label[for="${input.id}"]`);
+                        if (input.id) {
+                            try {
+                                label = document.querySelector(`label[for="${CSS.escape(input.id)}"]`);
+                            } catch (e) {
+                                label = document.querySelector(`label[for="${input.id}"]`);
+                            }
+                        }
                         if (!label) label = input.closest('label') || input.parentElement;
 
                         let optText = '';

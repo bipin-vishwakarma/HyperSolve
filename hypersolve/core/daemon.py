@@ -84,10 +84,19 @@ class HyperSolveDaemon:
         # 3. Detect Mode: Step Mode (1 question per view + Save & Next) vs Batch Mode
         initial_questions = await UniversalA11yParser.parse_page(page)
 
+        if not initial_questions:
+            print("[WAIT] No quiz questions found on this page yet (waiting for attempt to load)...")
+            await asyncio.sleep(2)
+            return
+
         # Check if there is a "Save & next" button (characteristic of step-by-step test runner)
-        has_step_next = await page.locator(
-            'button:has-text("Save & next" i), button:has-text("Save and next" i), .pcell'
-        ).count() > 0
+        has_step_next = False
+        try:
+            has_step_next = await page.locator(
+                'button:has-text("Save & next"), button:has-text("Save and next"), .pcell'
+            ).count() > 0
+        except Exception:
+            has_step_next = False
 
         if len(initial_questions) <= 1 and has_step_next:
             await self._run_step_mode(page)
@@ -160,12 +169,14 @@ class HyperSolveDaemon:
 
             await asyncio.sleep(0.4)
 
-            # Advance to Next Question: look for "Save & next"
-            next_btn = page.locator('button:has-text("Save & next" i), button:has-text("Save and next" i)').first
+            # Advance to Next Question: look for "Save & next" or Moodle Next page
+            next_btn = page.locator('button:has-text("Save & next"), button:has-text("Save and next")').first
             if await next_btn.count() == 0:
-                next_btn = page.locator('button.btn.primary:not(:has-text("Submit" i))').first
+                next_btn = page.locator('input.mod_quiz-next-nav, input[name="next"], button:has-text("Next page")').first
             if await next_btn.count() == 0:
-                next_btn = page.locator('input[value*="Next" i], button:has-text("Next" i):not(:has-text("review" i))').first
+                next_btn = page.locator('button.btn.primary:not(:has-text("Submit"))').first
+            if await next_btn.count() == 0:
+                next_btn = page.locator('input[value*="Next" i], button:has-text("Next"):not(:has-text("review"))').first
 
             if await next_btn.count() > 0 and await next_btn.is_visible():
                 current_q_text = q.text
@@ -234,3 +245,15 @@ class HyperSolveDaemon:
 
         print(f"\n[DONE] Successfully injected {injected}/{len(all_unanswered)} answers!")
         await HUDInjector.update_stats(page, injected, len(all_unanswered), status="COMPLETED", brain=brain_used)
+
+        # In Moodle / multi-page assessments, check if there's a Next page button
+        try:
+            next_btn = page.locator('input.mod_quiz-next-nav, input[name="next"], button:has-text("Next page")').first
+            if await next_btn.count() > 0 and await next_btn.is_visible():
+                print("[NAVIGATION] Auto-advancing to Next page in 2 seconds...")
+                await asyncio.sleep(2)
+                await next_btn.click()
+                await page.wait_for_load_state("domcontentloaded")
+                await asyncio.sleep(1)
+        except Exception:
+            pass

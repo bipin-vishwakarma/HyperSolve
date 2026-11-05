@@ -76,4 +76,12 @@ class BrowserManager:
             else:
                 categorized["other"].append(p)
 
+        # Prioritize active attempts (e.g. attempt.php) over landing/overview pages (view.php)
+        categorized["quiz"].sort(
+            key=lambda p: (
+                0 if "attempt.php" in p.url.lower() or "attempt" in p.url.lower() else
+                1 if "exam" in p.url.lower() or "test" in p.url.lower() else 2
+            )
+        )
+
         return categorized
