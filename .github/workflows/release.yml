@@ -1,0 +1,77 @@
+name: Release HyperSolve Windows Installer & OTA Manifest
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: write
+
+jobs:
+  build-and-release:
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout Source Code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: 'pip'
+
+      - name: Install Inno Setup
+        run: |
+          choco install innosetup -y --no-progress
+
+      - name: Install Python Dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install pyinstaller
+          python -m playwright install chromium
+
+      - name: Build Executable with PyInstaller
+        run: |
+          cd installer
+          pyinstaller hypersolve.spec --noconfirm
+
+      - name: Compile Windows Installer with Inno Setup
+        run: |
+          cd installer
+          & "C:\Program Files (x86)\Inno Setup 6\ISCC.exe" installer.iss
+
+      - name: Generate OTA Update Manifest (latest.json)
+        shell: pwsh
+        run: |
+          $Tag = "${{ github.ref_name }}"
+          $Version = $Tag.TrimStart('v')
+          $InstallerPath = Get-Item "dist_installer\HyperSolve-Setup-v*.exe" | Select-Object -First 1
+          $Hash = (Get-FileHash -Path $InstallerPath.FullName -Algorithm SHA256).Hash.ToLower()
+          $FileName = $InstallerPath.Name
+          $DownloadUrl = "https://github.com/${{ github.repository }}/releases/download/$Tag/$FileName"
+
+          $Manifest = @{
+              version      = $Version
+              tag_name     = $Tag
+              release_date = (Get-Date -Format "yyyy-MM-ddTHH:mm:ssZ")
+              download_url = $DownloadUrl
+              sha256       = $Hash
+              notes        = "Automated OTA production release for HyperSolve $Tag."
+          }
+
+          $Manifest | ConvertTo-Json -Depth 4 | Out-File -FilePath "dist_installer\latest.json" -Encoding utf8
+          Write-Host "Generated OTA Manifest:"
+          Get-Content "dist_installer\latest.json"
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            dist_installer/HyperSolve-Setup-v*.exe
+            dist_installer/latest.json
+          generate_release_notes: true
+          draft: false
+          prerelease: false
