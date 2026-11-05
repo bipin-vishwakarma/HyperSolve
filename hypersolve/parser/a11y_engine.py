@@ -146,7 +146,11 @@ class UniversalA11yParser:
                         if (!label) label = input.closest('label') || input.parentElement;
 
                         let optText = '';
-                        if (label) {
+                        const answerLabel = (label ? label.querySelector('[data-region="answer-label"]') : null) || 
+                                           (input.closest('div') ? input.closest('div').querySelector('[data-region="answer-label"]') : null);
+                        if (answerLabel) {
+                            optText = clean(answerLabel.innerText || answerLabel.textContent);
+                        } else if (label) {
                             const clone = label.cloneNode(true);
                             const nested = clone.querySelector('input');
                             if (nested) nested.remove();
@@ -158,6 +162,13 @@ class UniversalA11yParser:
                         const cleanedText = stripChoicePrefix(optText) || optText;
                         const refId = `__hypersolve_opt_${qId}_${idx}`;
                         input.setAttribute('data-hypersolve-opt', refId);
+                        if (label) {
+                            label.setAttribute('data-hypersolve-opt-label', refId);
+                        }
+                        const optContainer = input.closest('.r0, .r1, .answer > div') || input.parentElement;
+                        if (optContainer) {
+                            optContainer.setAttribute('data-hypersolve-opt-container', refId);
+                        }
 
                         options.push({
                             index: idx,

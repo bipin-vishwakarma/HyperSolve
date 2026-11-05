@@ -15,34 +15,45 @@ class SyntheticInjector:
         falls back to synthetic events and platform callbacks.
         """
         try:
-            # 1. First attempt: Native Playwright Hardware Click
-            target = page.locator(f'[data-hypersolve-opt="{opt_marker}"]').first
-            if await target.count() > 0 and await target.is_visible():
-                await target.scroll_into_view_if_needed()
-                await target.click(force=True)
-                await asyncio.sleep(random.uniform(0.1, 0.25))
-                return True
+            # 1. Native Playwright Hardware Click:
+            # Try clicking the label first (Moodle standard), then the container, then the input
+            locators = [
+                page.locator(f'[data-hypersolve-opt-label="{opt_marker}"]').first,
+                page.locator(f'[data-hypersolve-opt-container="{opt_marker}"]').first,
+                page.locator(f'[data-hypersolve-opt="{opt_marker}"]').first,
+            ]
+            for loc in locators:
+                if await loc.count() > 0 and await loc.is_visible():
+                    await loc.scroll_into_view_if_needed()
+                    await loc.click(force=True)
+                    break
         except Exception:
             pass
 
-        # 2. Second attempt: Synthetic PointerEvent & Direct Callback Dispatch
+        # 2. Enforce selection via synthetic event chain & DOM events
+        # This guarantees that even if the radio is custom-styled with opacity: 0,
+        # the radio input is checked and the change/input events fire for Moodle autosave.
         success = await page.evaluate(f"""(marker, index) => {{
             const input = document.querySelector(`[data-hypersolve-opt="${{marker}}"]`);
             if (!input) return false;
 
-            // Scroll into view
-            input.scrollIntoView({{ behavior: 'smooth', block: 'center' }});
+            const label = document.querySelector(`[data-hypersolve-opt-label="${{marker}}"]`) ||
+                          (input.id ? document.querySelector(`label[for="${{CSS.escape(input.id)}}"]`) : null) ||
+                          input.closest('label');
 
-            // Native synthetic sequence
-            const sequence = [
-                new PointerEvent('pointerdown', {{ bubbles: true, cancelable: true, pointerType: 'mouse' }}),
-                new MouseEvent('mousedown', {{ bubbles: true, cancelable: true }}),
-                new FocusEvent('focus', {{ bubbles: true }}),
-                new PointerEvent('pointerup', {{ bubbles: true, cancelable: true, pointerType: 'mouse' }}),
-                new MouseEvent('mouseup', {{ bubbles: true, cancelable: true }}),
-                new MouseEvent('click', {{ bubbles: true, cancelable: true }})
-            ];
-            sequence.forEach(evt => input.dispatchEvent(evt));
+            const container = document.querySelector(`[data-hypersolve-opt-container="${{marker}}"]`) || input.closest('div');
+
+            const clickTarget = label || container || input;
+            try {{
+                clickTarget.click();
+            }} catch(e) {{}}
+
+            // Native synthetic mouse event chain
+            ['pointerdown', 'mousedown', 'pointerup', 'mouseup', 'click'].forEach(evtName => {{
+                try {{
+                    clickTarget.dispatchEvent(new MouseEvent(evtName, {{ bubbles: true, cancelable: true, view: window }}));
+                }} catch(e) {{}}
+            }});
 
             if (input.tagName === 'INPUT') {{
                 input.checked = true;
@@ -62,6 +73,9 @@ class SyntheticInjector:
 
             return true;
         }}""", opt_marker, opt_index)
+
+        await asyncio.sleep(random.uniform(0.1, 0.25))
+        return success
 
         await asyncio.sleep(random.uniform(0.1, 0.25))
         return success

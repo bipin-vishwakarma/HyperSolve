@@ -39,22 +39,52 @@ class BrainRouter:
         return prompt
 
     def extract_answers_json(self, raw_text: str, expected_count: int) -> Optional[Dict[str, str]]:
-        """Extracts and validates JSON dictionary from model response."""
+        """Extracts and validates JSON dictionary from model response with flexible key normalization."""
         if not raw_text:
             return None
 
-        # Search for JSON block
-        json_match = re.search(r'\{[\s\S]*\}', raw_text)
-        if not json_match:
-            return None
+        text = raw_text.strip()
 
-        try:
-            parsed = json.loads(json_match.group(0))
-            if isinstance(parsed, dict) and len(parsed) >= expected_count:
-                normalized = {str(k).strip(): str(v).strip() for k, v in parsed.items()}
-                return normalized
-        except Exception:
-            return None
+        # 1. Look for ```json ... ``` code fence
+        code_block = re.search(r'```(?:json)?\s*(\{[\s\S]*?\})\s*```', text, re.IGNORECASE)
+        json_candidate = code_block.group(1) if code_block else None
+
+        if not json_candidate:
+            # Fallback to widest { ... }
+            braces = re.search(r'\{[\s\S]*\}', text)
+            if braces:
+                json_candidate = braces.group(0)
+
+        if json_candidate:
+            try:
+                # Remove trailing commas
+                cleaned = re.sub(r',\s*\}', '}', json_candidate)
+                parsed = json.loads(cleaned)
+                if isinstance(parsed, dict) and len(parsed) > 0:
+                    normalized = {}
+                    for k, v in parsed.items():
+                        # Extract digits: "Question 1" -> "1", "Q2" -> "2", "3" -> "3"
+                        digit_match = re.search(r'\d+', str(k))
+                        norm_k = digit_match.group(0) if digit_match else str(k).strip()
+                        normalized[norm_k] = str(v).strip()
+                    if normalized:
+                        return normalized
+            except Exception:
+                pass
+
+        # 2. Line-by-line fallback: "1. Answer" or "Question 1: Answer"
+        line_answers = {}
+        for line in text.splitlines():
+            line_str = line.strip()
+            m = re.match(r'^(?:Question\s*)?(\d+)[:.\-)\s]+(.*)$', line_str, re.IGNORECASE)
+            if m:
+                q_num = m.group(1).strip()
+                ans_str = m.group(2).strip()
+                if ans_str:
+                    line_answers[q_num] = ans_str
+
+        if line_answers:
+            return line_answers
 
         return None
 
