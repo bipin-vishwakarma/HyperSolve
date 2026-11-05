@@ -76,12 +76,12 @@ class BrowserManager:
             else:
                 categorized["other"].append(p)
 
-        # Prioritize active attempts (e.g. attempt.php) over landing/overview pages (view.php)
-        categorized["quiz"].sort(
-            key=lambda p: (
-                0 if "attempt.php" in p.url.lower() or "attempt" in p.url.lower() else
-                1 if "exam" in p.url.lower() or "test" in p.url.lower() else 2
-            )
-        )
+        # Prioritize active attempts (attempt.php) and filter out non-question landing pages (view.php)
+        active_attempts = [p for p in categorized["quiz"] if "attempt.php" in p.url.lower() or "attempt" in p.url.lower()]
+        if active_attempts:
+            categorized["quiz"] = active_attempts
+        else:
+            # If no attempt.php yet, filter out view.php so daemon waits until the user starts the attempt
+            categorized["quiz"] = [p for p in categorized["quiz"] if "view.php" not in p.url.lower()]
 
         return categorized

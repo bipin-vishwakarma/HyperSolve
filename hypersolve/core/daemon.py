@@ -288,20 +288,9 @@ class HyperSolveDaemon:
         all_unanswered = [q for q in initial_questions if not q.is_answered]
 
         if not all_unanswered:
-            print("[INFO] All questions on current view are already answered!")
+            print(f"[INFO] All {len(initial_questions)} question(s) on current view are already answered.")
             await HUDInjector.update_stats(page, len(initial_questions), len(initial_questions), status="COMPLETED")
-
-            # Check if there is a Next page button to auto-advance
-            try:
-                next_btn = page.locator('input.mod_quiz-next-nav:not([value*="Finish"]), input[name="next"]:not([value*="Finish"]), button:has-text("Next page")').first
-                if await next_btn.count() > 0 and await next_btn.is_visible():
-                    print("[NAVIGATION] Current page answered. Auto-advancing to Next page in 2s...")
-                    await asyncio.sleep(2)
-                    await next_btn.click()
-                    await page.wait_for_load_state("domcontentloaded")
-                    await asyncio.sleep(1)
-            except Exception:
-                pass
+            # SAFETY GUARANTEE: Never auto-advance if no answers were injected on this run!
             return
 
         print(f"[BATCH] Solving {len(all_unanswered)} question(s)...")
@@ -339,20 +328,21 @@ class HyperSolveDaemon:
         print(f"\n[DONE] Successfully injected {injected}/{len(all_unanswered)} answers!")
         await HUDInjector.update_stats(page, injected, len(all_unanswered), status="COMPLETED", brain=brain_used)
 
-        # Check for Moodle finish attempt vs next page button
-        try:
-            finish_btn = page.locator('input[value*="Finish attempt"], button:has-text("Finish attempt")').first
-            if await finish_btn.count() > 0 and await finish_btn.is_visible():
-                print("[ASSESSMENT COMPLETE] Reached final page of assessment. Answers locked.")
-                await HUDInjector.update_stats(page, injected, len(all_unanswered), status="READY TO SUBMIT", brain=brain_used)
-                return
+        # Auto-advance to Next page ONLY after answers were successfully injected
+        if injected > 0:
+            try:
+                finish_btn = page.locator('input[value*="Finish attempt"], button:has-text("Finish attempt")').first
+                if await finish_btn.count() > 0 and await finish_btn.is_visible():
+                    print("[ASSESSMENT COMPLETE] Reached final page of assessment. Answers locked.")
+                    await HUDInjector.update_stats(page, injected, len(all_unanswered), status="READY TO SUBMIT", brain=brain_used)
+                    return
 
-            next_btn = page.locator('input.mod_quiz-next-nav:not([value*="Finish"]), input[name="next"]:not([value*="Finish"]), button:has-text("Next page")').first
-            if await next_btn.count() > 0 and await next_btn.is_visible():
-                print("[NAVIGATION] Auto-advancing to Next page in 2 seconds...")
-                await asyncio.sleep(2)
-                await next_btn.click()
-                await page.wait_for_load_state("domcontentloaded")
-                await asyncio.sleep(1)
-        except Exception:
-            pass
+                next_btn = page.locator('input.mod_quiz-next-nav:not([value*="Finish"]), input[name="next"]:not([value*="Finish"]), button:has-text("Next page")').first
+                if await next_btn.count() > 0 and await next_btn.is_visible():
+                    print(f"[NAVIGATION] Injected {injected} answers. Auto-advancing to Next page in 2 seconds...")
+                    await asyncio.sleep(2)
+                    await next_btn.click()
+                    await page.wait_for_load_state("domcontentloaded")
+                    await asyncio.sleep(1)
+            except Exception:
+                pass

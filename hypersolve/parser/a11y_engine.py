@@ -125,15 +125,34 @@ class UniversalA11yParser:
                     const qText = qTextEl ? clean(qTextEl.innerText) : '';
                     if (!qText) continue;
 
-                    const inputs = Array.from(container.querySelectorAll('input[type="radio"], input[type="checkbox"]'));
+                    // Filter out Moodle's hidden "Clear my choice" radio button (value="-1") which is checked by default!
+                    const allInputs = Array.from(container.querySelectorAll('input[type="radio"], input[type="checkbox"]'));
+                    const inputs = allInputs.filter(inp => {
+                        if (inp.value === '-1') return false;
+                        if (inp.closest('.clearchoice')) return false;
+                        if (inp.name && inp.name.includes('_clearchoice')) return false;
+                        if (inp.classList.contains('sr-only') && inp.value === '-1') return false;
+                        return true;
+                    });
                     if (inputs.length < 2) continue;
 
+                    // Deterministic Moodle state detection:
+                    // 1. If container has 'notyetanswered' -> definitely not answered
+                    // 2. If container has 'answersaved' or 'complete' -> definitely answered
+                    // 3. Otherwise check if any real choice option is checked
                     let isAnswered = false;
+                    if (container.classList.contains('notyetanswered')) {
+                        isAnswered = false;
+                    } else if (container.classList.contains('answersaved') || container.classList.contains('complete')) {
+                        isAnswered = true;
+                    } else {
+                        isAnswered = inputs.some(inp => inp.checked);
+                    }
+
                     const options = [];
 
                     inputs.forEach((input, idx) => {
                         const isChecked = input.checked;
-                        if (isChecked) isAnswered = true;
 
                         let label = null;
                         if (input.id) {
@@ -249,6 +268,8 @@ class UniversalA11yParser:
             const allRadios = Array.from(document.querySelectorAll(
                 'input[type="radio"], [role="radio"], .opt, [class*="option-item"], [class*="choice"]'
             )).filter(el => {
+                if (el.value === '-1') return false;
+                if (el.closest('.clearchoice')) return false;
                 const r = el.getBoundingClientRect();
                 return r.width > 0 && r.height > 0;
             });
