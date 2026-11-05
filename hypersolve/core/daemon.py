@@ -337,10 +337,10 @@ class HyperSolveDaemon:
                     await HUDInjector.update_stats(page, injected, len(all_unanswered), status="READY TO SUBMIT", brain=brain_used)
                     return
 
-                next_btn = page.locator('input.mod_quiz-next-nav:not([value*="Finish"]), input[name="next"]:not([value*="Finish"]), button:has-text("Next page")').first
+                next_btn = page.locator('input.mod_quiz-next-nav:not([value*="Finish"]), input[value*="Next"]:not([value*="Finish"]), button:has-text("Next Question"), button:has-text("Next page"), button:has-text("Next")').first
                 if await next_btn.count() > 0 and await next_btn.is_visible():
-                    print(f"[NAVIGATION] Injected {injected} answers. Auto-advancing to Next page in 2 seconds...")
-                    await asyncio.sleep(2)
+                    print(f"[NAVIGATION] Injected {injected} answers. Auto-advancing to Next Question in 1.5 seconds...")
+                    await asyncio.sleep(1.5)
                     await next_btn.click()
                     await page.wait_for_load_state("domcontentloaded")
                     await asyncio.sleep(1)

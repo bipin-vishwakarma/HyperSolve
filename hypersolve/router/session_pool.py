@@ -106,22 +106,45 @@ class SessionPool:
                 except Exception:
                     pass
 
-            # Poll until text stabilizes
+            # Poll until text stabilizes or valid JSON is found
             last_text = ""
             stable_ticks = 0
             start_t = asyncio.get_event_loop().time()
             while (asyncio.get_event_loop().time() - start_t) < timeout_seconds:
-                msgs = await page.locator('[data-message-author-role="assistant"]').all()
-                if msgs:
-                    txt = (await msgs[-1].inner_text()).strip()
-                    if txt and txt == last_text:
+                txt = await page.evaluate(r"""() => {
+                    const selectors = [
+                        '[class*="DilResponseRoot"]',
+                        '[class*="response-root"]',
+                        '[data-message-author-role="assistant"]',
+                        'div[class*="agent-turn"]',
+                        '.markdown'
+                    ];
+                    for (const sel of selectors) {
+                        const els = Array.from(document.querySelectorAll(sel));
+                        if (els.length > 0) {
+                            return els[els.length - 1].innerText;
+                        }
+                    }
+                    const codeEls = Array.from(document.querySelectorAll('pre, code, [class*="TextBase"]'));
+                    for (let i = codeEls.length - 1; i >= 0; i--) {
+                        const t = codeEls[i].innerText;
+                        if (t && t.includes('{') && t.includes('}')) return t;
+                    }
+                    return null;
+                }""")
+                if txt:
+                    clean_txt = txt.strip()
+                    # If valid JSON is detected, return immediately!
+                    if "{" in clean_txt and "}" in clean_txt:
+                        return clean_txt
+                    if clean_txt == last_text:
                         stable_ticks += 1
                         if stable_ticks >= 2:
-                            return txt
+                            return clean_txt
                     else:
                         stable_ticks = 0
-                        last_text = txt
-                await asyncio.sleep(0.6)
+                        last_text = clean_txt
+                await asyncio.sleep(0.5)
 
             if last_text:
                 return last_text
