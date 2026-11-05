@@ -1,3 +1,16 @@
+# 2.1.0 — Windows desktop refresh
+
+- Replace the decorative command centre with Workspace, Connections, and Settings.
+- Add explicit tab selection, Start/Stop, real engine events, persistent window geometry, optional close-to-tray, and single-instance restoration.
+- Share one app lifecycle across desktop and tray; leave Chrome open on exit.
+- Add an authored multi-resolution icon, executable version metadata, and a bundled GUI entry point.
+- Replace source-linked setup with a per-user standalone installer and reproducible Windows build.
+- Require a trusted release checksum before launching updates; surface failures in the UI.
+- Remove generated confidence percentages and first-option fallback; reject malformed vision coordinates and overlapping screenshot operations.
+- Add offline regression checks. Live provider compatibility remains separately unverified.
+
+---
+
 # 📜 HyperSolve Changelog
 
 All notable changes to the **HyperSolve** project will be documented in this file.

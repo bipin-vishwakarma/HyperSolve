@@ -1,773 +1,751 @@
-"""
-HyperSolve Professional Command Center v2.0
-Production-grade native Windows application with decoupled frameless dark-glass UI,
-AppUserModelID taskbar identity, live telemetry, AI session manager,
-Ghost Shield proctoring armor, human mimicry engine, and OTA updater.
-"""
-
-import sys
-import os
-import ctypes
+"""Native desktop workspace with explicit runs and a shared tray lifecycle."""
 import asyncio
+import ctypes
+from datetime import datetime
+import logging
+import os
+import sys
 import threading
-import subprocess
 import webbrowser
-from typing import Optional, Dict, List
 
+from PyQt6.QtCore import Qt, QSettings, QThread, QTimer, pyqtSignal, QUrl, QLockFile
+from PyQt6.QtGui import QAction, QDesktopServices, QFont, QIcon
+from PyQt6.QtNetwork import QLocalServer, QLocalSocket
 from PyQt6.QtWidgets import (
-    QApplication, QWidget, QVBoxLayout, QHBoxLayout, QLabel,
-    QPushButton, QFrame, QScrollArea, QSlider, QProgressBar,
-    QStackedWidget, QLineEdit, QCheckBox, QGraphicsDropShadowEffect,
-    QSystemTrayIcon, QSizePolicy
+    QApplication, QWidget, QVBoxLayout, QHBoxLayout, QLabel, QPushButton,
+    QFrame, QScrollArea, QStackedWidget, QComboBox, QCheckBox, QPlainTextEdit,
+    QSystemTrayIcon, QMenu, QMessageBox, QProgressBar, QToolButton, QSizePolicy,
 )
-from PyQt6.QtGui import (
-    QColor, QFont, QCursor, QPainter, QLinearGradient, QIcon, QPixmap, QPen
-)
-from PyQt6.QtCore import (
-    Qt, QPoint, pyqtSignal, pyqtSlot, QTimer, QObject
-)
-
 from hypersolve.__version__ import __version__
-from hypersolve.stealth.ghost_shield import GhostShield
-from hypersolve.updater.engine import OTAUpdateManager, UpdateInfo
 from hypersolve.core.daemon import HyperSolveDaemon
+from hypersolve.updater.engine import OTAUpdateManager
+from .runtime import (
+    APP_ID, RESOURCE_DIR, DATA_DIR, LOG_DIR, CDP_URL,
+    configure_logging, inspect_connection, launch_chrome,
+)
 
-# -------------------------------------------------------------
-# Register Native Windows Application Identity
-# Prevents grouping under "Python" in the Windows Taskbar & Alt+Tab
-# -------------------------------------------------------------
-APP_ID = "HyperSolve.AutonomousEngine.CommandCenter.2.0"
-if sys.platform == "win32":
-    try:
-        ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID(APP_ID)
-    except Exception:
-        pass
+STYLE = """
+QWidget { background: #f3f4f8; color: #24293b; font-family: 'Segoe UI'; font-size: 14px; }
+QFrame#Sidebar, QFrame#Sidebar QWidget { background: #191e2e; color: #bdc5d9; }
+QFrame#Sidebar QLabel#Brand { color: #ffffff; font-size: 20px; font-weight: 600; }
+QFrame#Sidebar QPushButton { text-align: left; background: transparent; color: #bdc5d9; border: 0; padding: 12px 13px; }
+QFrame#Sidebar QPushButton:hover { background: #252c42; color: white; }
+QFrame#Sidebar QPushButton:checked { background: #313c60; color: white; }
+QFrame#Sidebar QLabel#RailState { color: #cbd4f3; background: #252c42; padding: 10px; border-radius: 5px; }
+QLabel { background: transparent; }
+QLabel#Title { font-size: 30px; font-weight: 600; color: #1d2335; }
+QLabel#Subtitle, QLabel#Muted { color: #606b82; }
+QLabel#Section { font-size: 16px; font-weight: 600; }
+QLabel#Status { color: #3c4f83; background: #e9edfb; padding: 7px 12px; border-radius: 4px; }
+QFrame#Panel { background: white; border: 1px solid #dfe3ed; border-radius: 8px; }
+QFrame#Panel QCheckBox { background: transparent; }
+QPushButton { background: #ffffff; border: 1px solid #c2c9da; padding: 9px 15px; border-radius: 5px; font-weight: 600; }
+QPushButton:hover { background: #eceffa; border-color: #8d9ab8; }
+QPushButton:pressed { background: #e1e6f5; }
+QPushButton:focus, QComboBox:focus, QCheckBox:focus { border: 2px solid #3759dc; }
+QPushButton#Primary { background: #3759dc; border-color: #3759dc; color: white; }
+QPushButton#Primary:hover { background: #2945b5; }
+QPushButton:disabled, QPushButton#Primary:disabled { background: #e7eaf1; border-color: #d8deea; color: #6c7589; }
+QComboBox { background: #ffffff; border: 1px solid #c2c9da; border-radius: 5px; padding: 10px; min-height: 20px; }
+QComboBox QAbstractItemView { background: white; selection-background-color: #e9edfb; selection-color: #24293b; }
+QCheckBox { spacing: 10px; padding: 8px 0; }
+QCheckBox::indicator { width: 16px; height: 16px; border: 1px solid #8d9ab8; border-radius: 3px; background: white; }
+QCheckBox::indicator:checked { background: #3759dc; border: 1px solid #3759dc; image: url(CHECK_ICON); }
+QFrame#Panel QLabel#Status { background: #e9edfb; }
+QPlainTextEdit { background: white; border: 1px solid #dfe3ed; border-radius: 5px; padding: 10px; font-family: 'Cascadia Mono', 'Consolas'; font-size: 12px; }
+QScrollArea { border: 0; background: transparent; }
+QScrollBar:vertical { width: 10px; background: transparent; margin: 2px; }
+QScrollBar::handle:vertical { background: #c2c9da; border-radius: 4px; min-height: 30px; }
+QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical { height: 0; }
+QScrollBar::add-page:vertical, QScrollBar::sub-page:vertical { background: transparent; }
+QToolButton { color: #3c4f83; background: transparent; border: 0; padding: 6px 0; text-align: left; }
+QToolButton:hover { color: #2945b5; }
+QToolButton:focus { border: 1px solid #3759dc; }
+QLabel#EmptyTitle { font-size: 21px; font-weight: 600; color: #303b5a; }
+QLabel#StepTitle { font-weight: 600; color: #303b5a; }
+QLabel#StepDetail { color: #606b82; font-size: 12px; }
+QFrame#Workbench { background: white; border: 1px solid #dfe3ed; border-radius: 9px; }
+QFrame#Workbench QScrollArea, QFrame#Workbench QWidget#ResultBody { background: white; }
+QFrame#Divider { background: #dfe3ed; max-height: 1px; border: 0; }
+QProgressBar { background: #e4e8f3; border: 0; border-radius: 2px; max-height: 4px; }
+QProgressBar::chunk { background: #3759dc; border-radius: 2px; }
+QMenu { background: white; border: 1px solid #dfe3ed; padding: 4px; }
+QMenu::item { padding: 8px 20px; }
+QMenu::item:selected { background: #e9edfb; }
+"""
 
-REPO_DIR = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-ICON_PATH = os.path.join(REPO_DIR, "installer", "hypersolve.ico")
 
-class DashboardBridge(QObject):
-    target_attached = pyqtSignal(str)
-    questions_harvested = pyqtSignal(int, list)
-    answer_injected = pyqtSignal(int, str, str, float)
-    assessment_completed = pyqtSignal(int, int, str)
-    brain_detected = pyqtSignal(str)
-    ota_status = pyqtSignal(str, object)
+def label(text, name=None):
+    widget = QLabel(text)
+    widget.setTextFormat(Qt.TextFormat.PlainText)
+    widget.setWordWrap(True)
+    if name:
+        widget.setObjectName(name)
+    return widget
 
 
-class QuestionCard(QFrame):
-    def __init__(self, q_num: int, text: str, selected_option: str = "Analyzing question...", confidence: float = 0.0, parent=None):
+def button(text, callback, primary=False):
+    widget = QPushButton(text)
+    widget.setCursor(Qt.CursorShape.PointingHandCursor)
+    widget.clicked.connect(callback)
+    if primary:
+        widget.setObjectName("Primary")
+    return widget
+
+
+def panel():
+    frame = QFrame()
+    frame.setObjectName("Panel")
+    layout = QVBoxLayout(frame)
+    layout.setContentsMargins(22, 20, 22, 20)
+    layout.setSpacing(12)
+    return frame, layout
+
+
+class FunctionWorker(QThread):
+    result = pyqtSignal(object)
+    failed = pyqtSignal(str)
+
+    def __init__(self, function, parent=None):
         super().__init__(parent)
-        self.q_num = q_num
-        self.setStyleSheet("""
-            QFrame {
-                background-color: #1e293b;
-                border: 1px solid #334155;
-                border-radius: 8px;
-                padding: 8px;
-            }
-        """)
+        self.function = function
 
-        layout = QVBoxLayout(self)
-        layout.setContentsMargins(12, 10, 12, 10)
-        layout.setSpacing(6)
+    def run(self):
+        try:
+            self.result.emit(self.function())
+        except Exception as exc:
+            logging.exception("Background operation failed")
+            self.failed.emit(str(exc))
 
-        header = QHBoxLayout()
-        self.num_lbl = QLabel(f"QUESTION {q_num}")
-        self.num_lbl.setStyleSheet("color: #94a3b8; font-weight: 800; font-size: 11px; letter-spacing: 0.5px;")
-        header.addWidget(self.num_lbl)
-        header.addStretch()
 
-        self.badge = QLabel("ROUTING")
-        self.badge.setStyleSheet("background-color: #0284c7; color: white; font-size: 10px; font-weight: bold; padding: 2px 8px; border-radius: 4px;")
-        header.addWidget(self.badge)
-        layout.addLayout(header)
+class EngineWorker(QThread):
+    event = pyqtSignal(str, object)
+    failed = pyqtSignal(str)
 
-        self.text_lbl = QLabel(text[:95] + ("..." if len(text) > 95 else ""))
-        self.text_lbl.setWordWrap(True)
-        self.text_lbl.setStyleSheet("color: #f8fafc; font-size: 13px; font-weight: 500;")
-        layout.addWidget(self.text_lbl)
+    def __init__(self, target_url, parent=None, *, target_id=None):
+        super().__init__(parent)
+        self.target_url = target_url
+        self.target_id = target_id
+        self._loop = None
+        self._task = None
+        self._stop_requested = threading.Event()
+        self._lock = threading.Lock()
 
-        self.opt_lbl = QLabel(f"➔ {selected_option}")
-        self.opt_lbl.setStyleSheet("color: #38bdf8; font-size: 12px; font-style: italic;")
-        layout.addWidget(self.opt_lbl)
+    async def _run_engine(self):
+        with self._lock:
+            self._loop = asyncio.get_running_loop()
+            self._task = asyncio.current_task()
+        if self._stop_requested.is_set():
+            with self._lock:
+                self._loop = self._task = None
+            return
+        daemon = HyperSolveDaemon(target_url=self.target_url, target_id=self.target_id, on_event=self.event.emit)
+        try:
+            await daemon.start()
+        except asyncio.CancelledError:
+            pass
+        finally:
+            with self._lock:
+                self._loop = self._task = None
 
-    def set_answer(self, option_text: str, confidence: float, verified: bool = False):
-        self.opt_lbl.setText(f"➔ {option_text}")
-        if verified:
-            self.badge.setText("VERIFIED ✓")
-            self.badge.setStyleSheet("background-color: #059669; color: white; font-size: 10px; font-weight: bold; padding: 2px 8px; border-radius: 4px;")
-            self.setStyleSheet("QFrame { background-color: #064e3b; border: 1px solid #10b981; border-radius: 8px; }")
-        else:
-            self.badge.setText(f"LOCKED {confidence:.1f}%")
-            self.badge.setStyleSheet("background-color: #0284c7; color: white; font-size: 10px; font-weight: bold; padding: 2px 8px; border-radius: 4px;")
-            self.setStyleSheet("QFrame { background-color: #1e293b; border: 1px solid #0284c7; border-radius: 8px; }")
+    def run(self):
+        try:
+            asyncio.run(self._run_engine())
+        except Exception as exc:
+            logging.exception("Engine stopped unexpectedly")
+            self.failed.emit(str(exc))
+
+    def stop(self):
+        self._stop_requested.set()
+        with self._lock:
+            if self._loop and self._task:
+                self._loop.call_soon_threadsafe(self._task.cancel)
 
 
 class HyperSolveDashboard(QWidget):
-    """Production Frameless Command Center GUI for Windows."""
-
-    def __init__(self, cdp_url: str = "http://127.0.0.1:9222"):
+    def __init__(self, cdp_url=CDP_URL, *, auto_scan=True):
         super().__init__()
         self.cdp_url = cdp_url
-        self.bridge = DashboardBridge()
-        self.daemon: Optional[HyperSolveDaemon] = None
-        self.loop: Optional[asyncio.AbstractEventLoop] = None
-        self._drag_pos = QPoint()
-        self.cards: Dict[int, QuestionCard] = {}
-        self.latest_update_info: Optional[UpdateInfo] = None
-
-        self._init_window()
+        self.settings = QSettings("HyperSolve", "Desktop")
+        self.engine = None
+        self.jobs = []
+        self.scanning = False
+        self.connection = {"connected": False, "providers": [], "targets": []}
+        self.latest_update = None
+        self.question_rows = {}
+        self._quitting = False
+        self.setWindowTitle("HyperSolve")
+        self.setWindowIcon(QIcon(str(RESOURCE_DIR / "hypersolve.ico")))
+        self.resize(1160, 780)
+        self.setMinimumSize(860, 620)
+        self.setStyleSheet(STYLE.replace("CHECK_ICON", (RESOURCE_DIR / "check.svg").as_posix()))
         self._build_ui()
-        self._wire_bridge()
-        self._start_daemon_thread()
-
-    def _init_window(self):
-        self.setWindowFlags(Qt.WindowType.FramelessWindowHint | Qt.WindowType.WindowMinMaxButtonsHint)
-        self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground, True)
-        self.setWindowTitle("HyperSolve Command Center")
-        if os.path.exists(ICON_PATH):
-            self.setWindowIcon(QIcon(ICON_PATH))
-        self.resize(840, 660)
-        self.setMinimumSize(780, 560)
+        self._build_tray()
+        geometry = self.settings.value("geometry")
+        if geometry:
+            self.restoreGeometry(geometry)
+        self.timer = QTimer(self)
+        self.timer.timeout.connect(self.refresh_connection)
+        if auto_scan:
+            self.timer.start(6000)
+            QTimer.singleShot(0, self.refresh_connection)
 
     def _build_ui(self):
-        outer = QVBoxLayout(self)
-        outer.setContentsMargins(12, 12, 12, 12)
-
-        self.container = QFrame(self)
-        self.container.setObjectName("MainContainer")
-        self.container.setStyleSheet("""
-            QFrame#MainContainer {
-                background-color: #0b0f19;
-                border: 1px solid #1e293b;
-                border-radius: 14px;
-            }
-        """)
-
-        shadow = QGraphicsDropShadowEffect(self)
-        shadow.setBlurRadius(28)
-        shadow.setColor(QColor(6, 182, 212, 50))
-        shadow.setOffset(0, 4)
-        self.container.setGraphicsEffect(shadow)
-
-        layout = QVBoxLayout(self.container)
-        layout.setContentsMargins(20, 16, 20, 18)
-        layout.setSpacing(14)
-
-        # -------------------------------------------------------------
-        # 1. Custom Frameless Draggable Title Bar
-        # -------------------------------------------------------------
-        title_bar = QHBoxLayout()
-        title_bar.setContentsMargins(0, 0, 0, 2)
-
-        logo = QLabel("⚡ HYPERSOLVE COMMAND CENTER")
-        logo.setStyleSheet("color: #06b6d4; font-weight: 800; font-size: 13px; letter-spacing: 1px;")
-        title_bar.addWidget(logo)
-
-        ver_badge = QLabel(f"v{__version__} Production")
-        ver_badge.setStyleSheet("color: #64748b; font-size: 11px; margin-left: 6px; font-weight: 600;")
-        title_bar.addWidget(ver_badge)
-
-        title_bar.addStretch()
-
-        min_btn = QPushButton("—")
-        min_btn.setFixedSize(28, 28)
-        min_btn.setStyleSheet("QPushButton { background-color: #1e293b; color: #94a3b8; border-radius: 6px; font-weight: bold; border: none; } QPushButton:hover { background-color: #334155; color: white; }")
-        min_btn.clicked.connect(self.showMinimized)
-        title_bar.addWidget(min_btn)
-
-        close_btn = QPushButton("✕")
-        close_btn.setFixedSize(28, 28)
-        close_btn.setStyleSheet("QPushButton { background-color: #1e293b; color: #94a3b8; border-radius: 6px; font-weight: bold; border: none; } QPushButton:hover { background-color: #ef4444; color: white; }")
-        close_btn.clicked.connect(self._on_exit)
-        title_bar.addWidget(close_btn)
-        layout.addLayout(title_bar)
-
-        # -------------------------------------------------------------
-        # 2. Modern Navigation Bar (Tabs)
-        # -------------------------------------------------------------
-        nav_bar = QHBoxLayout()
-        nav_bar.setSpacing(8)
-
-        self.nav_btns = []
-        tabs_config = [
-            ("📊 Live Telemetry", 0),
-            ("🧠 AI Sessions", 1),
-            ("🛡️ Ghost Shield", 2),
-            ("🎯 Mimicry Engine", 3),
-            ("🔄 Updates & System", 4),
-        ]
-
-        for text, idx in tabs_config:
-            btn = QPushButton(text)
-            btn.setCheckable(True)
-            if idx == 0:
-                btn.setChecked(True)
-            btn.setStyleSheet(self._nav_btn_style(idx == 0))
-            btn.clicked.connect(lambda chk, i=idx: self._switch_tab(i))
-            nav_bar.addWidget(btn)
-            self.nav_btns.append(btn)
-
-        nav_bar.addStretch()
-        layout.addLayout(nav_bar)
-
-        # -------------------------------------------------------------
-        # 3. Stacked View Pages
-        # -------------------------------------------------------------
+        root = QHBoxLayout(self)
+        root.setContentsMargins(0, 0, 0, 0)
+        root.setSpacing(0)
+        sidebar = QFrame()
+        sidebar.setObjectName("Sidebar")
+        sidebar.setFixedWidth(198)
+        side = QVBoxLayout(sidebar)
+        side.setContentsMargins(14, 28, 14, 20)
+        side.setSpacing(7)
+        brand = QHBoxLayout()
+        mark = QLabel()
+        mark.setPixmap(QIcon(str(RESOURCE_DIR / "hypersolve.ico")).pixmap(32, 32))
+        brand.addWidget(mark)
+        brand.addWidget(label("HyperSolve", "Brand"))
+        side.addLayout(brand)
+        side.addSpacing(34)
+        self.nav = []
+        for index, text in enumerate(("Workspace", "Connections", "Settings")):
+            item = button(text, lambda checked=False, i=index: self.switch_page(i))
+            item.setIcon(QIcon(str(RESOURCE_DIR / ("workspace.svg", "connections.svg", "settings.svg")[index])))
+            item.setCheckable(True)
+            self.nav.append(item)
+            side.addWidget(item)
+        side.addStretch()
+        self.rail_state = label("Browser not connected", "RailState")
+        side.addWidget(self.rail_state)
+        side.addSpacing(9)
+        side.addWidget(label(f"Version {__version__}"))
+        root.addWidget(sidebar)
         self.stack = QStackedWidget()
+        root.addWidget(self.stack, 1)
+        self._build_workspace()
+        self._build_connections()
+        self._build_settings()
+        self.switch_page(0)
 
-        # Page 0: Live Telemetry
-        self.stack.addWidget(self._build_telemetry_page())
-        # Page 1: AI Sessions Hub
-        self.stack.addWidget(self._build_ai_hub_page())
-        # Page 2: Ghost Shield Diagnostics
-        self.stack.addWidget(self._build_shield_page())
-        # Page 3: Human Mimicry Settings
-        self.stack.addWidget(self._build_mimicry_page())
-        # Page 4: OTA Updates & Diagnostics
-        self.stack.addWidget(self._build_updates_page())
-
-        layout.addWidget(self.stack)
-
-        # -------------------------------------------------------------
-        # 4. Global Bottom Action Bar
-        # -------------------------------------------------------------
-        btn_bar = QHBoxLayout()
-        btn_bar.setSpacing(10)
-
-        self.launch_chrome_btn = QPushButton("🌐 Launch Exam Chrome")
-        self.launch_chrome_btn.setStyleSheet(self._action_btn_style("#0284c7", "#0369a1"))
-        self.launch_chrome_btn.clicked.connect(self._launch_chrome)
-        btn_bar.addWidget(self.launch_chrome_btn)
-
-        self.fast_solve_btn = QPushButton("⚡ Auto-Solve Active Tab")
-        self.fast_solve_btn.setStyleSheet(self._action_btn_style("#059669", "#047857"))
-        self.fast_solve_btn.clicked.connect(self._trigger_fast_solve)
-        btn_bar.addWidget(self.fast_solve_btn)
-
-        btn_bar.addStretch()
-
-        self.panic_btn = QPushButton("👻 Emergency Panic (Ctrl+Shift+X)")
-        self.panic_btn.setStyleSheet(self._action_btn_style("#dc2626", "#b91c1c"))
-        self.panic_btn.clicked.connect(self._panic_hide)
-        btn_bar.addWidget(self.panic_btn)
-
-        self.quit_btn = QPushButton("⏹️ Quit App & Close Browser")
-        self.quit_btn.setStyleSheet(self._action_btn_style("#475569", "#334155"))
-        self.quit_btn.clicked.connect(self._on_exit)
-        btn_bar.addWidget(self.quit_btn)
-
-        layout.addLayout(btn_bar)
-        outer.addWidget(self.container)
-
-    # =========================================================================
-    # Page Builders
-    # =========================================================================
-
-    def _build_telemetry_page(self) -> QWidget:
+    def _page(self, title, subtitle):
         page = QWidget()
-        l = QVBoxLayout(page)
-        l.setContentsMargins(0, 4, 0, 0)
-        l.setSpacing(12)
+        layout = QVBoxLayout(page)
+        layout.setContentsMargins(32, 28, 32, 26)
+        layout.setSpacing(18)
+        layout.addWidget(label(title, "Title"))
+        layout.addWidget(label(subtitle, "Subtitle"))
+        scroll = QScrollArea()
+        scroll.setWidgetResizable(True)
+        scroll.setWidget(page)
+        self.stack.addWidget(scroll)
+        return layout
 
-        # Metrics Row
-        m_row = QHBoxLayout()
-        m_row.setSpacing(10)
+    def _build_workspace(self):
+        layout = self._page("Workspace", "One tab. One session. Everything in view.")
+        columns = QHBoxLayout()
+        columns.setSpacing(24)
+        workbench = QFrame()
+        workbench.setObjectName("Workbench")
+        work = QVBoxLayout(workbench)
+        work.setContentsMargins(22, 22, 22, 18)
+        work.setSpacing(14)
+        top = QHBoxLayout()
+        top.addWidget(label("Source tab", "Section"))
+        top.addStretch()
+        self.state_label = label("Stopped", "Status")
+        top.addWidget(self.state_label)
+        work.addLayout(top)
+        self.targets = QComboBox()
+        self.targets.setAccessibleName("Browser tab to process")
+        self.targets.setSizeAdjustPolicy(QComboBox.SizeAdjustPolicy.AdjustToMinimumContentsLengthWithIcon)
+        self.targets.setMinimumContentsLength(10)
+        self.targets.addItem("Connect Chrome to choose a tab", None)
+        self.targets.currentIndexChanged.connect(self._update_start)
+        work.addWidget(self.targets)
+        self.connection_hint = label("Checking the browser connection…", "Muted")
+        work.addWidget(self.connection_hint)
+        actions = QHBoxLayout()
+        self.start_button = button("Start session", self.start_session, True)
+        self.start_button.setEnabled(False)
+        self.stop_button = button("Stop", self.stop_session)
+        self.stop_button.setEnabled(False)
+        actions.addWidget(self.start_button)
+        actions.addWidget(self.stop_button)
+        actions.addStretch()
+        self.compact_setup_button = button("Open Chrome", self._next_setup_action, True)
+        self.compact_setup_button.hide()
+        actions.addWidget(self.compact_setup_button)
+        work.addLayout(actions)
+        divider = QFrame()
+        divider.setObjectName("Divider")
+        divider.setFixedHeight(1)
+        work.addWidget(divider)
+        header = QHBoxLayout()
+        self.results_title = label("Results", "Section")
+        header.addWidget(self.results_title)
+        header.addStretch()
+        self.progress_label = label("Waiting to start", "Muted")
+        self.progress_label.setWordWrap(False)
+        self.progress_label.setMaximumWidth(240)
+        header.addWidget(self.progress_label)
+        work.addLayout(header)
+        self.progress = QProgressBar()
+        self.progress.setTextVisible(False)
+        self.progress.setRange(0, 100)
+        self.progress.setValue(0)
+        work.addWidget(self.progress)
+        scroll = QScrollArea()
+        scroll.setWidgetResizable(True)
+        body = QWidget()
+        body.setObjectName("ResultBody")
+        self.results = QVBoxLayout(body)
+        self.results.setContentsMargins(0, 0, 0, 0)
+        self.results.setSpacing(12)
+        self.empty = QWidget()
+        self.empty.setStyleSheet("background: white;")
+        empty = QVBoxLayout(self.empty)
+        empty.setContentsMargins(20, 28, 20, 28)
+        empty.setSpacing(14)
+        icon = QLabel()
+        icon.setPixmap(QIcon(str(RESOURCE_DIR / "tabs.svg")).pixmap(80, 64))
+        icon.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        empty.addWidget(icon)
+        title = label("A clear view of every answer", "EmptyTitle")
+        title.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        empty.addWidget(title)
+        description = label("Choose your source tab above. Questions and selected answers will appear here as the session runs.", "Muted")
+        description.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        empty.addWidget(description)
+        self.results.addStretch()
+        self.results.addWidget(self.empty)
+        self.results.addStretch()
+        scroll.setWidget(body)
+        work.addWidget(scroll, 1)
+        self.log_toggle = QToolButton()
+        self.log_toggle.setText("Show activity log")
+        self.log_toggle.setCheckable(True)
+        self.log_toggle.setToolButtonStyle(Qt.ToolButtonStyle.ToolButtonTextOnly)
+        self.log_toggle.toggled.connect(self._toggle_log)
+        work.addWidget(self.log_toggle)
+        self.activity = QPlainTextEdit()
+        self.activity.setReadOnly(True)
+        self.activity.setAccessibleName("Session event log")
+        self.activity.setMaximumBlockCount(300)
+        self.activity.setFixedHeight(110)
+        self.activity.hide()
+        work.addWidget(self.activity)
+        columns.addWidget(workbench, 1)
+        setup = QWidget()
+        self.setup_panel = setup
+        setup.setFixedWidth(218)
+        info = QVBoxLayout(setup)
+        info.setContentsMargins(0, 8, 0, 0)
+        info.setSpacing(14)
+        info.addWidget(label("Session setup", "Section"))
+        self.setup_states = []
+        for title in ("Connect Chrome", "Open an AI provider", "Choose a source tab"):
+            info.addSpacing(4)
+            info.addWidget(label(title, "StepTitle"))
+            detail = label("Not ready", "StepDetail")
+            self.setup_states.append(detail)
+            info.addWidget(detail)
+            line = QFrame()
+            line.setObjectName("Divider")
+            line.setFixedHeight(1)
+            info.addWidget(line)
+        self.next_button = button("Open Chrome", self._next_setup_action, True)
+        info.addWidget(self.next_button)
+        info.addStretch()
+        info.addWidget(label("How a session works", "StepTitle"))
+        info.addWidget(label("Reads questions from your tab, asks an AI provider, then selects matching answers and navigates pages. Review the result in Chrome.", "StepDetail"))
+        columns.addWidget(setup)
+        layout.addLayout(columns, 1)
 
-        self.metric_shield = self._make_metric_card("🛡️ GHOST SHIELD", "ARMED", "#10b981")
-        self.metric_brain = self._make_metric_card("🧠 BRAIN SESSION", "ChatGPT (Web Tab)", "#38bdf8")
-        self.metric_grade = self._make_metric_card("🎯 MIMICRY GRADE", "100% (Turbo)", "#f59e0b")
-        self.metric_status = self._make_metric_card("📡 ENGINE STATUS", "MONITORING", "#06b6d4")
+    def resizeEvent(self, event):
+        super().resizeEvent(event)
+        if hasattr(self, "setup_panel"):
+            wide = self.width() >= 1040
+            self.setup_panel.setVisible(wide)
+            self.compact_setup_button.setVisible(not wide)
 
-        m_row.addWidget(self.metric_shield)
-        m_row.addWidget(self.metric_brain)
-        m_row.addWidget(self.metric_grade)
-        m_row.addWidget(self.metric_status)
-        l.addLayout(m_row)
+    def _toggle_log(self, checked):
+        self.activity.setVisible(checked)
+        self.log_toggle.setText("Hide activity log" if checked else "Show activity log")
 
-        # Feed Header
-        feed_header = QHBoxLayout()
-        self.feed_title = QLabel("ACTIVE ASSESSMENT TELEMETRY")
-        self.feed_title.setStyleSheet("color: #cbd5e1; font-weight: bold; font-size: 12px; letter-spacing: 0.5px;")
-        feed_header.addWidget(self.feed_title)
-        feed_header.addStretch()
-
-        self.progress_bar = QProgressBar()
-        self.progress_bar.setFixedHeight(8)
-        self.progress_bar.setFixedWidth(200)
-        self.progress_bar.setTextVisible(False)
-        self.progress_bar.setStyleSheet("""
-            QProgressBar { background-color: #1e293b; border-radius: 4px; }
-            QProgressBar::chunk { background-color: #06b6d4; border-radius: 4px; }
-        """)
-        self.progress_bar.setValue(0)
-        feed_header.addWidget(self.progress_bar)
-        l.addLayout(feed_header)
-
-        # Scroll Feed
-        self.scroll = QScrollArea()
-        self.scroll.setWidgetResizable(True)
-        self.scroll.setStyleSheet("QScrollArea { border: none; background: transparent; } QScrollBar:vertical { background: #0f172a; width: 8px; border-radius: 4px; } QScrollBar::handle:vertical { background: #334155; border-radius: 4px; }")
-
-        self.feed_container = QWidget()
-        self.feed_layout = QVBoxLayout(self.feed_container)
-        self.feed_layout.setContentsMargins(0, 0, 0, 0)
-        self.feed_layout.setSpacing(8)
-
-        self.empty_lbl = QLabel("Waiting for an active assessment tab in Chrome (Moodle, Canvas, Forms)...")
-        self.empty_lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        self.empty_lbl.setStyleSheet("color: #64748b; font-size: 13px; padding: 50px;")
-        self.feed_layout.addWidget(self.empty_lbl)
-
-        self.scroll.setWidget(self.feed_container)
-        l.addWidget(self.scroll)
-        return page
-
-    def _build_ai_hub_page(self) -> QWidget:
-        page = QWidget()
-        l = QVBoxLayout(page)
-        l.setContentsMargins(0, 6, 0, 0)
-        l.setSpacing(14)
-
-        desc = QLabel("Manage your zero-API web tab sessions or connect optional direct API keys:")
-        desc.setStyleSheet("color: #94a3b8; font-size: 13px;")
-        l.addWidget(desc)
-
-        # Provider Cards
-        l.addWidget(self._make_provider_card("ChatGPT (OpenAI)", "Active Tab Connected • Free / Plus Session Pool", "https://chatgpt.com", active=True))
-        l.addWidget(self._make_provider_card("Google Gemini", "Active Tab Connected • Free Google Account Session", "https://gemini.google.com", active=True))
-        l.addWidget(self._make_provider_card("Claude AI", "Web Tab Supported • Anthropic Session", "https://claude.ai", active=False))
-
-        # API Key Fallback Card
-        api_card = QFrame()
-        api_card.setStyleSheet("QFrame { background-color: #1e293b; border: 1px solid #334155; border-radius: 8px; padding: 12px; }")
-        a_layout = QVBoxLayout(api_card)
-        a_title = QLabel("Optional Developer Turbo API Key (Zero Setup Required)")
-        a_title.setStyleSheet("color: #f8fafc; font-size: 13px; font-weight: bold;")
-        a_desc = QLabel("If no browser tab is open, HyperSolve can seamlessly fall back to your personal API key:")
-        a_desc.setStyleSheet("color: #94a3b8; font-size: 12px;")
-
-        self.api_input = QLineEdit()
-        self.api_input.setPlaceholderText("Enter GEMINI_API_KEY or OPENAI_API_KEY (Optional)")
-        self.api_input.setStyleSheet("background-color: #0f172a; color: white; border: 1px solid #475569; border-radius: 6px; padding: 8px;")
-
-        a_layout.addWidget(a_title)
-        a_layout.addWidget(a_desc)
-        a_layout.addWidget(self.api_input)
-        l.addWidget(api_card)
-
-        l.addStretch()
-        return page
-
-    def _build_shield_page(self) -> QWidget:
-        page = QWidget()
-        l = QVBoxLayout(page)
-        l.setContentsMargins(0, 6, 0, 0)
-        l.setSpacing(14)
-
-        header = QLabel("Ghost Shield Anti-Proctoring Matrix")
-        header.setStyleSheet("color: #f8fafc; font-size: 15px; font-weight: bold;")
-        l.addWidget(header)
-
-        features = [
-            ("Tab Switch & Blur Interceptor", "Captures and stops 'blur', 'focusout', and 'visibilitychange' before LMS scripts receive them.", True),
-            ("Document Visibility Spoofing", "Forces document.visibilityState to permanently return 'visible' and document.hidden to false.", True),
-            ("Warning Banner Neutralizer", "Finds and removes any red 'Tab Switch Detected' warning banners from the quiz DOM automatically.", True),
-            ("Autosave Event Emulation", "Simulates native hardware pointer events to guarantee answers are saved without triggering cheat flags.", True)
-        ]
-
-        for title, detail, default_val in features:
-            f_frame = QFrame()
-            f_frame.setStyleSheet("QFrame { background-color: #1e293b; border-radius: 8px; padding: 12px; border: 1px solid #334155; }")
-            fl = QHBoxLayout(f_frame)
-            info_col = QVBoxLayout()
-            t_lbl = QLabel(title)
-            t_lbl.setStyleSheet("color: #f8fafc; font-weight: bold; font-size: 13px;")
-            d_lbl = QLabel(detail)
-            d_lbl.setStyleSheet("color: #94a3b8; font-size: 12px;")
-            d_lbl.setWordWrap(True)
-            info_col.addWidget(t_lbl)
-            info_col.addWidget(d_lbl)
-            fl.addLayout(info_col)
-
-            chk = QCheckBox()
-            chk.setChecked(default_val)
-            chk.setStyleSheet("QCheckBox::indicator { width: 22px; height: 22px; border-radius: 4px; background-color: #0f172a; border: 1px solid #06b6d4; } QCheckBox::indicator:checked { background-color: #06b6d4; }")
-            fl.addWidget(chk)
-            l.addWidget(f_frame)
-
-        l.addStretch()
-        return page
-
-    def _build_mimicry_page(self) -> QWidget:
-        page = QWidget()
-        l = QVBoxLayout(page)
-        l.setContentsMargins(0, 6, 0, 0)
-        l.setSpacing(16)
-
-        title = QLabel("Human Mimicry & Score Calibration")
-        title.setStyleSheet("color: #f8fafc; font-size: 15px; font-weight: bold;")
-        l.addWidget(title)
-
-        desc = QLabel("Adjust how HyperSolve behaves to ensure your score matches a natural top student instead of an obvious 100% bot:")
-        desc.setStyleSheet("color: #94a3b8; font-size: 13px;")
-        l.addWidget(desc)
-
-        # Target Accuracy Slider Card
-        slider_card = QFrame()
-        slider_card.setStyleSheet("QFrame { background-color: #1e293b; border-radius: 8px; padding: 16px; border: 1px solid #334155; }")
-        s_layout = QVBoxLayout(slider_card)
-
-        self.slider_lbl = QLabel("Target Score: 100% (Perfect / All Correct)")
-        self.slider_lbl.setStyleSheet("color: #06b6d4; font-size: 14px; font-weight: bold;")
-        s_layout.addWidget(self.slider_lbl)
-
-        self.score_slider = QSlider(Qt.Orientation.Horizontal)
-        self.score_slider.setRange(75, 100)
-        self.score_slider.setValue(100)
-        self.score_slider.setStyleSheet("""
-            QSlider::groove:horizontal { height: 8px; background: #0f172a; border-radius: 4px; }
-            QSlider::sub-page:horizontal { background: #06b6d4; border-radius: 4px; }
-            QSlider::handle:horizontal { background: #ffffff; border: 2px solid #06b6d4; width: 18px; margin-top: -5px; margin-bottom: -5px; border-radius: 9px; }
-        """)
-        self.score_slider.valueChanged.connect(self._on_slider_changed)
-        s_layout.addWidget(self.score_slider)
-
-        s_notes = QLabel("Dialing down to 90%-95% introduces natural second-choice variance so exams look authentically human.")
-        s_notes.setStyleSheet("color: #64748b; font-size: 12px; margin-top: 6px;")
-        s_layout.addWidget(s_notes)
-        l.addWidget(slider_card)
-
-        l.addStretch()
-        return page
-
-    def _build_updates_page(self) -> QWidget:
-        page = QWidget()
-        l = QVBoxLayout(page)
-        l.setContentsMargins(0, 6, 0, 0)
-        l.setSpacing(14)
-
-        title = QLabel("Over-The-Air (OTA) Updates & Diagnostics")
-        title.setStyleSheet("color: #f8fafc; font-size: 15px; font-weight: bold;")
-        l.addWidget(title)
-
-        up_card = QFrame()
-        up_card.setStyleSheet("QFrame { background-color: #1e293b; border-radius: 8px; padding: 16px; border: 1px solid #334155; }")
-        u_layout = QVBoxLayout(up_card)
-
-        cur_ver = QLabel(f"Installed Version: v{__version__} (Production Channel)")
-        cur_ver.setStyleSheet("color: #f8fafc; font-size: 14px; font-weight: bold;")
-        u_layout.addWidget(cur_ver)
-
-        self.update_status_lbl = QLabel("Status: You are running the latest version.")
-        self.update_status_lbl.setStyleSheet("color: #10b981; font-size: 13px;")
-        u_layout.addWidget(self.update_status_lbl)
-
-        btn_row = QHBoxLayout()
-        self.check_update_btn = QPushButton("🔄 Check for Updates Now")
-        self.check_update_btn.setStyleSheet(self._action_btn_style("#0284c7", "#0369a1"))
-        self.check_update_btn.clicked.connect(self._manual_check_ota)
-        btn_row.addWidget(self.check_update_btn)
-
-        self.install_update_btn = QPushButton("🚀 Install Update Silently")
-        self.install_update_btn.setStyleSheet(self._action_btn_style("#059669", "#047857"))
-        self.install_update_btn.setEnabled(False)
-        self.install_update_btn.clicked.connect(self._install_ota_update)
-        btn_row.addWidget(self.install_update_btn)
-        btn_row.addStretch()
-
-        u_layout.addLayout(btn_row)
-        l.addWidget(up_card)
-
-        # Release Notes Box
-        self.notes_box = QLabel("Release Notes:\n • 3-phase rapid full quiz harvesting engine\n • Zero-API ChatGPT & Gemini web tab session pool\n • Native Windows Frameless Command Center & System Tray\n • Ghost Shield Anti-Proctoring tab switch neutralizer")
-        self.notes_box.setStyleSheet("background-color: #0f172a; color: #94a3b8; padding: 14px; border-radius: 8px; font-size: 12px; line-height: 1.5; border: 1px solid #1e293b;")
-        l.addWidget(self.notes_box)
-
-        l.addStretch()
-        return page
-
-    # =========================================================================
-    # Helpers & Component Factories
-    # =========================================================================
-
-    def _make_metric_card(self, title: str, value: str, val_color: str) -> QFrame:
-        card = QFrame()
-        card.setStyleSheet("QFrame { background-color: #1e293b; border-radius: 8px; padding: 10px; border: 1px solid #334155; }")
-        cl = QVBoxLayout(card)
-        cl.setContentsMargins(10, 8, 10, 8)
-        t_lbl = QLabel(title)
-        t_lbl.setStyleSheet("color: #94a3b8; font-size: 11px; font-weight: bold;")
-        v_lbl = QLabel(value)
-        v_lbl.setObjectName("ValLbl")
-        v_lbl.setStyleSheet(f"color: {val_color}; font-size: 13px; font-weight: 800;")
-        cl.addWidget(t_lbl)
-        cl.addWidget(v_lbl)
-        return card
-
-    def _make_provider_card(self, name: str, status: str, url: str, active: bool) -> QFrame:
-        card = QFrame()
-        card.setStyleSheet("QFrame { background-color: #1e293b; border-radius: 8px; padding: 12px; border: 1px solid #334155; }")
-        l = QHBoxLayout(card)
-
-        col = QVBoxLayout()
-        nl = QLabel(name)
-        nl.setStyleSheet("color: #f8fafc; font-size: 13px; font-weight: bold;")
-        sl = QLabel(status)
-        sl.setStyleSheet(f"color: {'#10b981' if active else '#94a3b8'}; font-size: 12px;")
-        col.addWidget(nl)
-        col.addWidget(sl)
-        l.addLayout(col)
-
-        l.addStretch()
-
-        open_btn = QPushButton("Open Session")
-        open_btn.setStyleSheet(self._action_btn_style("#334155", "#475569"))
-        open_btn.clicked.connect(lambda: webbrowser.open(url))
-        l.addWidget(open_btn)
-        return card
-
-    def _nav_btn_style(self, checked: bool) -> str:
-        bg = "#06b6d4" if checked else "#1e293b"
-        color = "#0b0f19" if checked else "#94a3b8"
-        return f"""
-            QPushButton {{
-                background-color: {bg};
-                color: {color};
-                font-size: 12px;
-                font-weight: 700;
-                padding: 7px 14px;
-                border-radius: 6px;
-                border: none;
-            }}
-            QPushButton:hover {{
-                background-color: {'#22d3ee' if checked else '#334155'};
-                color: {'#0b0f19' if checked else '#ffffff'};
-            }}
-        """
-
-    def _action_btn_style(self, bg: str, hover: str) -> str:
-        return f"""
-            QPushButton {{
-                background-color: {bg};
-                color: white;
-                font-size: 12px;
-                font-weight: 600;
-                padding: 8px 16px;
-                border-radius: 6px;
-                border: none;
-            }}
-            QPushButton:hover {{
-                background-color: {hover};
-            }}
-            QPushButton:disabled {{
-                background-color: #334155;
-                color: #64748b;
-            }}
-        """
-
-    def _switch_tab(self, idx: int):
-        self.stack.setCurrentIndex(idx)
-        for i, btn in enumerate(self.nav_btns):
-            btn.setChecked(i == idx)
-            btn.setStyleSheet(self._nav_btn_style(i == idx))
-
-    def _on_slider_changed(self, val: int):
-        if val == 100:
-            txt = "100% (Perfect / All Correct)"
-            desc = "100% (Turbo)"
-        elif val >= 95:
-            txt = f"{val}% (Top Distinction A+)"
-            desc = f"{val}% (A+)"
-        elif val >= 90:
-            txt = f"{val}% (Natural Top Grade A)"
-            desc = f"{val}% (A)"
+    def _next_setup_action(self):
+        if not self.connection["connected"]:
+            self.open_browser()
+        elif not (self.connection["providers"] or os.getenv("GEMINI_API_KEY") or os.getenv("OPENAI_API_KEY")):
+            self.switch_page(1)
         else:
-            txt = f"{val}% (Realistic Pass B+)"
-            desc = f"{val}% (B+)"
-        self.slider_lbl.setText(f"Target Score: {txt}")
-        val_lbl = self.metric_grade.findChild(QLabel, "ValLbl")
-        if val_lbl:
-            val_lbl.setText(desc)
-        if self.daemon:
-            self.daemon.target_accuracy = val / 100.0
+            self.targets.setFocus()
+            self.targets.showPopup()
 
-    # -------------------------------------------------------------
-    # Mouse Drag Handling for Frameless Window
-    # -------------------------------------------------------------
-    def mousePressEvent(self, event):
-        if event.button() == Qt.MouseButton.LeftButton:
-            self._drag_pos = event.globalPosition().toPoint() - self.frameGeometry().topLeft()
-            event.accept()
+    def _build_connections(self):
+        layout = self._page("Connections", "A separate Chrome profile keeps this workspace apart from your everyday browsing.")
+        frame, content = panel()
+        content.addWidget(label("Browser connection", "Section"))
+        self.browser_status = label("Not checked yet", "Muted")
+        content.addWidget(self.browser_status)
+        content.addWidget(label("Open the workspace browser, sign in to an AI provider, and open the page you want to work with."))
+        row = QHBoxLayout()
+        row.addWidget(button("Open workspace browser", self.open_browser, True))
+        self.refresh_button = button("Refresh connection", self.refresh_connection)
+        row.addWidget(self.refresh_button)
+        row.addStretch()
+        content.addLayout(row)
+        layout.addWidget(frame)
+        frame, content = panel()
+        content.addWidget(label("AI providers", "Section"))
+        content.addWidget(label("An open tab is detected automatically. Sign-in and availability are checked when a request runs.", "Muted"))
+        self.provider_labels = {}
+        for name, url in (("ChatGPT", "https://chatgpt.com"), ("Gemini", "https://gemini.google.com"), ("Claude", "https://claude.ai")):
+            row = QHBoxLayout()
+            row.addWidget(label(name))
+            row.addStretch()
+            state = label("No tab detected", "Muted")
+            self.provider_labels[name] = state
+            row.addWidget(state)
+            open_button = button("Open", lambda checked=False, u=url: self._open_provider(u))
+            open_button.setAccessibleName(f"Open {name} in workspace browser")
+            row.addWidget(open_button)
+            content.addLayout(row)
+        layout.addWidget(frame)
+        layout.addStretch()
 
-    def mouseMoveEvent(self, event):
-        if event.buttons() == Qt.MouseButton.LeftButton and hasattr(self, '_drag_pos'):
-            self.move(event.globalPosition().toPoint() - self._drag_pos)
-            event.accept()
+    def _build_settings(self):
+        layout = self._page("Settings", "Windows preferences, updates, and help when something goes wrong.")
+        frame, content = panel()
+        content.addWidget(label("Desktop behaviour", "Section"))
+        self.close_to_tray = QCheckBox("Keep running in the system tray when I close the window")
+        self.close_to_tray.setChecked(self.settings.value("close_to_tray", False, type=bool))
+        self.close_to_tray.toggled.connect(lambda value: self.settings.setValue("close_to_tray", value))
+        content.addWidget(self.close_to_tray)
+        content.addWidget(label("With this enabled, closing the window keeps the session running. Quit HyperSolve stops it. Chrome stays open.", "Muted"))
+        layout.addWidget(frame)
+        frame, content = panel()
+        content.addWidget(label("Application updates", "Section"))
+        self.update_label = label(f"Installed version: {__version__}", "Muted")
+        content.addWidget(self.update_label)
+        row = QHBoxLayout()
+        self.check_button = button("Check for updates", self.check_updates)
+        self.install_button = button("Download and install", self.install_update, True)
+        self.install_button.setEnabled(False)
+        row.addWidget(self.check_button)
+        row.addWidget(self.install_button)
+        row.addStretch()
+        content.addLayout(row)
+        layout.addWidget(frame)
+        frame, content = panel()
+        content.addWidget(label("Diagnostics", "Section"))
+        content.addWidget(label("Local logs record application errors. Review them before sharing; session details may appear in diagnostic output.", "Muted"))
+        row = QHBoxLayout()
+        row.addWidget(button("Open log folder", self.open_logs))
+        row.addWidget(button("Report an issue", lambda: webbrowser.open("https://github.com/bipin-vishwakarma/HyperSolve/issues")))
+        row.addStretch()
+        content.addLayout(row)
+        layout.addWidget(frame)
+        layout.addStretch()
 
-    # -------------------------------------------------------------
-    # Bridge Slots & Events
-    # -------------------------------------------------------------
-    def _wire_bridge(self):
-        self.bridge.target_attached.connect(self._on_target_attached)
-        self.bridge.questions_harvested.connect(self._on_questions_harvested)
-        self.bridge.answer_injected.connect(self._on_answer_injected)
-        self.bridge.assessment_completed.connect(self._on_assessment_completed)
-        self.bridge.ota_status.connect(self._on_ota_status)
+    def _build_tray(self):
+        self.tray = QSystemTrayIcon(self.windowIcon(), self)
+        self.tray.setToolTip("HyperSolve — Stopped")
+        menu = QMenu(self)
+        menu.addAction("Open HyperSolve", self.restore_window)
+        self.tray_stop = menu.addAction("Stop session", self.stop_session)
+        self.tray_stop.setEnabled(False)
+        menu.addSeparator()
+        menu.addAction("Quit HyperSolve", self.request_quit)
+        self.tray.setContextMenu(menu)
+        self.tray.activated.connect(lambda reason: self.restore_window() if reason in (QSystemTrayIcon.ActivationReason.Trigger, QSystemTrayIcon.ActivationReason.DoubleClick) else None)
+        if QSystemTrayIcon.isSystemTrayAvailable():
+            self.tray.show()
 
-    def _on_target_attached(self, url: str):
-        self.empty_lbl.hide()
-        self.feed_title.setText(f"TARGET ATTACHED: {url[:50]}...")
-        self.progress_bar.setValue(15)
-        val_lbl = self.metric_status.findChild(QLabel, "ValLbl")
-        if val_lbl:
-            val_lbl.setText("SOLVING")
+    def switch_page(self, index):
+        self.stack.setCurrentIndex(index)
+        for i, item in enumerate(self.nav):
+            item.setChecked(i == index)
 
-    def _on_questions_harvested(self, count: int, questions: list):
-        self.empty_lbl.hide()
-        self.progress_bar.setValue(45)
-        for card in self.cards.values():
-            card.deleteLater()
-        self.cards.clear()
+    def _job(self, function, callback, error_callback=None):
+        worker = FunctionWorker(function, self)
+        self.jobs.append(worker)
+        worker.result.connect(callback)
+        worker.failed.connect(error_callback or self.show_error)
+        worker.finished.connect(lambda: self._job_finished(worker))
+        worker.start()
 
-        for q in questions:
-            card = QuestionCard(q.get("id", len(self.cards) + 1), q.get("text", ""))
-            self.cards[q.get("id")] = card
-            self.feed_layout.addWidget(card)
+    def _job_finished(self, worker):
+        self.jobs.remove(worker)
+        worker.deleteLater()
+        self._finish_quit_if_ready()
 
-    def _on_answer_injected(self, q_num: int, text: str, opt: str, conf: float):
-        if q_num in self.cards:
-            self.cards[q_num].set_answer(opt, conf, verified=False)
-        self.progress_bar.setValue(min(90, self.progress_bar.value() + 5))
+    def refresh_connection(self):
+        if self.scanning or self._quitting:
+            return
+        self.scanning = True
+        self.refresh_button.setEnabled(False)
+        self._job(lambda: inspect_connection(self.cdp_url), self._connection_result, self._scan_failed)
 
-    def _on_assessment_completed(self, injected: int, total: int, brain: str):
-        self.progress_bar.setValue(100)
-        self.feed_title.setText(f"COMPLETED: {injected}/{total} Solved via {brain} 🎉")
-        val_lbl = self.metric_status.findChild(QLabel, "ValLbl")
-        if val_lbl:
-            val_lbl.setText("STANDBY")
+    def _scan_failed(self, message):
+        self._connection_result({"connected": False, "providers": [], "targets": [], "error": message})
 
-    def _on_ota_status(self, msg: str, info: Optional[UpdateInfo]):
-        self.update_status_lbl.setText(f"Status: {msg}")
-        if info:
-            self.latest_update_info = info
-            self.install_update_btn.setEnabled(True)
-            self.install_update_btn.setText(f"🚀 Install v{info.version} Silently")
+    def _connection_result(self, data):
+        self.scanning = False
+        self.refresh_button.setEnabled(True)
+        self.connection = data
+        connected = data["connected"]
+        self.rail_state.setText("Chrome connected" if connected else "Browser not connected")
+        self.browser_status.setText("Connected to Chrome on this computer" if connected else "Chrome is not connected. Open the workspace browser, then refresh.")
+        self.connection_hint.setText(("Browser connected  ·  " + (", ".join(data["providers"]) + " tab detected" if data["providers"] else "Open an AI provider tab to continue")) if connected else "Connect the workspace browser to get started.")
+        previous = self.targets.currentData()
+        self.targets.blockSignals(True)
+        self.targets.clear()
+        for target in data["targets"]:
+            self.targets.addItem(target.get("title") or target["url"], {"url": target["url"], "id": target.get("id")})
+            self.targets.setItemData(self.targets.count() - 1, target["url"], Qt.ItemDataRole.ToolTipRole)
+        if not data["targets"]:
+            self.targets.addItem("Open a page in workspace Chrome" if connected else "Connect Chrome to choose a tab", None)
+        index = self.targets.findData(previous)
+        if index >= 0:
+            self.targets.setCurrentIndex(index)
+        self.targets.blockSignals(False)
+        for name, status in self.provider_labels.items():
+            status.setText("Tab detected" if name in data["providers"] else "No tab detected")
+        self._update_start()
 
-    def _manual_check_ota(self):
-        self.update_status_lbl.setText("Status: Pinging GitHub Releases API...")
-        def check():
-            info = OTAUpdateManager.check_for_updates()
-            if info:
-                self.bridge.ota_status.emit(f"Update Available: v{info.version} ready!", info)
-            else:
-                self.bridge.ota_status.emit("You are running the latest version.", None)
-        threading.Thread(target=check, daemon=True).start()
+    def _update_start(self):
+        has_ai = bool(self.connection["providers"] or os.getenv("GEMINI_API_KEY") or os.getenv("OPENAI_API_KEY"))
+        connected = self.connection["connected"]
+        target = self.targets.currentData()
+        ready = not self._quitting and self.engine is None and connected and has_ai and bool(target)
+        self.start_button.setEnabled(ready)
+        self.targets.setEnabled(connected and self.engine is None)
+        if hasattr(self, "setup_states"):
+            self.setup_states[0].setText("Connected on this computer" if connected else "A separate profile for this workspace")
+            self.setup_states[1].setText(", ".join(self.connection["providers"]) + " tab detected" if self.connection["providers"] else ("API key configured" if has_ai else "ChatGPT, Gemini, or Claude"))
+            self.setup_states[2].setText("Tab selected — ready to start" if target else "Open the page you want to work with")
+            self.next_button.setText("Open Chrome" if not connected else ("Connect AI" if not has_ai else "Choose tab"))
+            self.next_button.setEnabled(self.engine is None and not self._quitting)
+            self.compact_setup_button.setText(self.next_button.text())
+            self.compact_setup_button.setEnabled(self.next_button.isEnabled())
 
-    def _install_ota_update(self):
-        if self.latest_update_info:
-            self.update_status_lbl.setText("Status: Downloading payload and launching silent installer...")
-            threading.Thread(
-                target=lambda: OTAUpdateManager.download_and_install_update(self.latest_update_info, silent=True),
-                daemon=True
-            ).start()
+    def open_browser(self):
+        try:
+            launch_chrome()
+            self.browser_status.setText("Browser requested. Refresh after Chrome opens.")
+            QTimer.singleShot(1800, self.refresh_connection)
+        except OSError as exc:
+            self.show_error(str(exc))
 
-    def _launch_chrome(self):
-        profile_dir = os.path.join(REPO_DIR, "chrome_profile")
-        cmd = f'start "" "C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe" --remote-debugging-port=9222 --user-data-dir="{profile_dir}" "https://chatgpt.com"'
-        subprocess.Popen(cmd, shell=True)
+    def _open_provider(self, url):
+        try:
+            launch_chrome(url)
+            QTimer.singleShot(1800, self.refresh_connection)
+        except OSError as exc:
+            self.show_error(str(exc))
 
-    def _trigger_fast_solve(self):
-        if self.daemon and self.loop:
-            self.feed_title.setText("Scanning open tabs...")
+    def start_session(self):
+        if self.engine is not None or not self.start_button.isEnabled():
+            return
+        self.empty.hide()
+        for frame in self.question_rows.values():
+            self.results.removeWidget(frame)
+            frame.deleteLater()
+        self.question_rows.clear()
+        self.activity.clear()
+        self.progress.setValue(0)
+        self.progress_label.setText("Starting…")
+        target = self.targets.currentData()
+        self.engine = EngineWorker(target["url"], self, target_id=target["id"])
+        self.engine.event.connect(self._engine_event)
+        self.engine.failed.connect(self.show_error)
+        self.engine.finished.connect(self._engine_finished)
+        self.start_button.setEnabled(False)
+        self.targets.setEnabled(False)
+        self.stop_button.setEnabled(True)
+        self.tray_stop.setEnabled(True)
+        self._set_status("Running")
+        self.engine.start()
 
-    def _start_daemon_thread(self):
-        def runner():
-            self.loop = asyncio.new_event_loop()
-            asyncio.set_event_loop(self.loop)
-            self.daemon = HyperSolveDaemon(
-                cdp_url=self.cdp_url,
-                on_target_attached=lambda url: self.bridge.target_attached.emit(url),
-                on_solved=lambda inj, tot, brain: self.bridge.assessment_completed.emit(inj, tot, brain),
-            )
-            try:
-                self.loop.run_until_complete(self.daemon.start())
-            except Exception:
-                pass
+    def stop_session(self):
+        if self.engine:
+            self._set_status("Stopping…")
+            self.stop_button.setEnabled(False)
+            self.tray_stop.setEnabled(False)
+            self.engine.stop()
 
-        t = threading.Thread(target=runner, daemon=True, name="HyperSolve-Daemon-Worker")
-        t.start()
+    def _engine_finished(self):
+        self.engine.deleteLater()
+        self.engine = None
+        self.targets.setEnabled(True)
+        self.stop_button.setEnabled(False)
+        self.tray_stop.setEnabled(False)
+        self._set_status("Stopped")
+        self._append_activity("Session stopped. Chrome has been left open.")
+        self._update_start()
+        self._finish_quit_if_ready()
 
-    def _panic_hide(self):
-        """Emergency Panic: immediately vanishes the window from screen."""
-        self.hide()
+    def _engine_event(self, kind, payload):
+        if kind == "status":
+            self._append_activity(payload)
+            self.progress_label.setText(payload)
+            self.progress_label.setToolTip(payload)
+        elif kind == "error":
+            self.show_error(payload)
+        elif kind == "questions":
+            for question in payload:
+                frame, content = panel()
+                content.addWidget(label(f"Question {question['id']}", "Section"))
+                content.addWidget(label(question["text"]))
+                answer = label("Waiting for a response", "Muted")
+                content.addWidget(answer)
+                frame.answer_label = answer
+                self.question_rows[question["id"]] = frame
+                self.results.insertWidget(self.results.count() - 1, frame)
+        elif kind == "answer":
+            frame = self.question_rows.get(payload["id"])
+            if frame:
+                frame.answer_label.setText("Selected: " + payload["answer"])
+            self.progress.setValue(round(payload["done"] / max(payload["total"], 1) * 100))
+            self.progress_label.setText(f"{payload['done']} of {payload['total']} selected")
+        elif kind == "complete":
+            self.progress.setValue(round(payload["done"] / max(payload["total"], 1) * 100))
+            self._append_activity(f"Session finished: {payload['done']}/{payload['total']} selected via {payload['brain']}.")
+            self.stop_session()
+
+    def _append_activity(self, message):
+        self.activity.appendPlainText(f"{datetime.now():%H:%M:%S}  {message}")
+
+    def _set_status(self, text):
+        self.state_label.setText(text)
+        self.tray.setToolTip(f"HyperSolve — {text}")
+
+    def show_error(self, message):
+        self._append_activity("Error: " + message)
+        self.progress_label.setText("A problem occurred — see activity below")
+        self.empty.hide()
+        self.log_toggle.setChecked(True)
+        self.switch_page(0)
+
+    def check_updates(self):
+        self.check_button.setEnabled(False)
+        self.install_button.setEnabled(False)
+        self.latest_update = None
+        self.update_label.setText("Checking for updates…")
+        self._job(OTAUpdateManager.check_for_updates, self._update_result, self._update_failed)
+
+    def _update_result(self, info):
+        self.check_button.setEnabled(True)
+        self.latest_update = info
+        self.update_label.setText(f"Version {info.version} is available." if info else f"You’re up to date. Installed version: {__version__}.")
+        self.install_button.setEnabled(bool(info))
+
+    def _update_failed(self, message):
+        self.check_button.setEnabled(True)
+        self.install_button.setEnabled(bool(self.latest_update))
+        self.update_label.setText("Update failed: " + message)
+
+    def install_update(self):
+        if not self.latest_update or self.engine:
+            self.update_label.setText("Stop the current session before installing an update.")
+            return
+        self.install_button.setEnabled(False)
+        self.check_button.setEnabled(False)
+        self.update_label.setText("Downloading and verifying installer…")
+        self._job(lambda: OTAUpdateManager.download_and_install_update(self.latest_update, silent=False), self._install_result, self._update_failed)
+
+    def _install_result(self, success):
+        self.check_button.setEnabled(True)
+        self.install_button.setEnabled(not success)
+        self.update_label.setText("Installer opened. Follow Windows Setup to finish." if success else "The installer could not be verified or launched. Try again or use the release page.")
+
+    def open_logs(self):
+        LOG_DIR.mkdir(parents=True, exist_ok=True)
+        QDesktopServices.openUrl(QUrl.fromLocalFile(str(LOG_DIR)))
+
+    def restore_window(self):
+        self.showNormal()
+        self.raise_()
+        self.activateWindow()
 
     def closeEvent(self, event):
-        """Handle standard window close (Alt+F4 or system close button)."""
-        self._on_exit()
-        event.accept()
+        if self._quitting:
+            event.setAccepted(self.engine is None and not self.jobs)
+            return
+        self.settings.setValue("geometry", self.saveGeometry())
+        if self.close_to_tray.isChecked() and self.tray.isVisible() and not self._quitting:
+            self.hide()
+            event.ignore()
+        else:
+            event.ignore()
+            self.request_quit()
 
-    def _kill_exam_chrome(self):
-        """Terminates ONLY the dedicated Chrome instance attached to port 9222 / chrome_profile."""
-        try:
-            import psutil
-            for proc in psutil.process_iter(['pid', 'name', 'cmdline']):
-                try:
-                    if proc.info['name'] and 'chrome' in proc.info['name'].lower():
-                        cmd = ' '.join(proc.info['cmdline'] or [])
-                        if 'chrome_profile' in cmd or '--remote-debugging-port=9222' in cmd:
-                            proc.kill()
-                except (psutil.NoSuchProcess, psutil.AccessDenied):
-                    pass
-        except Exception:
-            pass
+    def request_quit(self):
+        if self._quitting:
+            return
+        self._quitting = True
+        self.timer.stop()
+        self.settings.setValue("geometry", self.saveGeometry())
+        self.start_button.setEnabled(False)
+        self.check_button.setEnabled(False)
+        self.install_button.setEnabled(False)
+        self.stop_session()
+        self._finish_quit_if_ready()
 
-    def _on_exit(self):
-        """Cleanly and completely shut down HyperSolve, background loops, exam Chrome, and exit."""
-        self.hide()
-        try:
-            if self.daemon and self.loop:
-                self.loop.call_soon_threadsafe(self.loop.stop)
-            if self.daemon and self.daemon.browser_manager:
-                if self.loop and self.loop.is_running():
-                    try:
-                        asyncio.run_coroutine_threadsafe(self.daemon.browser_manager.disconnect(), self.loop)
-                    except Exception:
-                        pass
-        except Exception:
-            pass
-
-        # Terminate the isolated exam Chrome instance
-        self._kill_exam_chrome()
-
-        QApplication.quit()
-        # Hard exit to ensure no background threads or asyncio loops linger in Windows
-        os._exit(0)
+    def _finish_quit_if_ready(self):
+        if self._quitting and self.engine is None and not self.jobs:
+            self.tray.hide()
+            QTimer.singleShot(0, QApplication.instance().quit)
 
 
-def run_dashboard():
-    # Register Native Windows Application Identity
-    # Prevents grouping under "Python" in the Windows Taskbar & Alt+Tab
+def run_dashboard(start_in_tray=False):
+    configure_logging()
     if sys.platform == "win32":
-        try:
-            ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID(APP_ID)
-        except Exception:
-            pass
-        # Auto-hide any console window attached to this process
-        hwnd = ctypes.windll.kernel32.GetConsoleWindow()
-        if hwnd:
-            ctypes.windll.user32.ShowWindow(hwnd, 0) # SW_HIDE
-
+        ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID(APP_ID)
     app = QApplication(sys.argv)
-    app.setApplicationName("HyperSolve Command Center")
-    app.setApplicationDisplayName("HyperSolve Command Center")
+    app.setApplicationName("HyperSolve")
     app.setOrganizationName("HyperSolve")
-    if os.path.exists(ICON_PATH):
-        app.setWindowIcon(QIcon(ICON_PATH))
-    dashboard = HyperSolveDashboard()
-    dashboard.show()
-    sys.exit(app.exec())
+    app.setFont(QFont("Segoe UI", 10))
+    app.setStyle("Fusion")
+    from PyQt6.QtGui import QPalette, QColor
+    palette = app.palette()
+    palette.setColor(QPalette.ColorRole.Window, QColor("#f3f4f8"))
+    palette.setColor(QPalette.ColorRole.WindowText, QColor("#24293b"))
+    palette.setColor(QPalette.ColorRole.Text, QColor("#24293b"))
+    palette.setColor(QPalette.ColorRole.Base, QColor("#ffffff"))
+    palette.setColor(QPalette.ColorRole.Button, QColor("#ffffff"))
+    palette.setColor(QPalette.ColorRole.ButtonText, QColor("#24293b"))
+    palette.setColor(QPalette.ColorRole.Highlight, QColor("#3759dc"))
+    palette.setColor(QPalette.ColorRole.HighlightedText, QColor("#ffffff"))
+    app.setPalette(palette)
+    app.setQuitOnLastWindowClosed(False)
+    app.setWindowIcon(QIcon(str(RESOURCE_DIR / "hypersolve.ico")))
+    # A second launch asks the existing instance to restore its window.
+    DATA_DIR.mkdir(parents=True, exist_ok=True)
+    lock = QLockFile(str(DATA_DIR / "desktop.lock"))
+    if not lock.tryLock(100):
+        socket = QLocalSocket()
+        socket.connectToServer(APP_ID)
+        socket.waitForConnected(1500)
+        return
+    QLocalServer.removeServer(APP_ID)
+    server = QLocalServer()
+    server.listen(APP_ID)
+    window = HyperSolveDashboard()
+    def restore():
+        socket = server.nextPendingConnection()
+        if socket:
+            socket.disconnectFromServer()
+            socket.deleteLater()
+        window.restore_window()
+    server.newConnection.connect(restore)
+    if not start_in_tray or not window.tray.isVisible():
+        window.show()
+    exit_code = app.exec()
+    server.close()
+    lock.unlock()
+    return exit_code
+
 
 if __name__ == "__main__":
     run_dashboard()

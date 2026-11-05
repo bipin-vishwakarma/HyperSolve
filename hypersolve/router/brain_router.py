@@ -1,4 +1,5 @@
 import os
+import asyncio
 import re
 import json
 import base64
@@ -143,12 +144,12 @@ class BrainRouter:
         openai_key = os.getenv("OPENAI_API_KEY")
 
         if gemini_key:
-            ans = self._query_gemini_api(prompt, gemini_key, len(questions))
+            ans = await asyncio.to_thread(self._query_gemini_api, prompt, gemini_key, len(questions))
             if ans:
                 return ans, "Gemini 2.0 (Turbo API)"
 
         if openai_key:
-            ans = self._query_openai_api(prompt, openai_key, len(questions))
+            ans = await asyncio.to_thread(self._query_openai_api, prompt, openai_key, len(questions))
             if ans:
                 return ans, "GPT-4o (Turbo API)"
 

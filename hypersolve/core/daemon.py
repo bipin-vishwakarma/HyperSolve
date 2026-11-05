@@ -1,7 +1,7 @@
 import os
 import re
 import asyncio
-import random
+import logging
 import sys
 from urllib.parse import urlparse, parse_qs, urlencode, urlunparse
 from typing import Dict, List, Optional, Set, Callable
@@ -39,6 +39,9 @@ class HyperSolveDaemon:
         on_status_change: Optional[Callable[[str], None]] = None,
         on_target_attached: Optional[Callable[[str], None]] = None,
         on_solved: Optional[Callable[[int, int, str], None]] = None,
+        target_url: Optional[str] = None,
+        target_id: Optional[str] = None,
+        on_event: Optional[Callable[[str, object], None]] = None,
     ):
         self.browser_manager = BrowserManager(cdp_url)
         self.heartbeat: Optional[HeartbeatDaemon] = None
@@ -48,33 +51,46 @@ class HyperSolveDaemon:
         self.on_status_change = on_status_change
         self.on_target_attached = on_target_attached
         self.on_solved = on_solved
-        self.target_accuracy: float = 1.0
+        self.target_url = target_url
+        self.target_id = target_id
+        self.on_event = on_event
+
+    def _emit(self, kind, payload):
+        if self.on_event:
+            self.on_event(kind, payload)
+        if kind == "status" and self.on_status_change:
+            self.on_status_change(payload)
 
     async def start(self):
-        """Starts the daemon in a perpetual supervisor loop."""
-        print("\n" + "=" * 65)
-        print("  ⚡ HYPERSOLVE — UNIVERSAL AUTONOMOUS ASSESSMENT ENGINE ⚡")
-        print("  [SHIELD] Ghost Shield Anti-Proctoring Armor: ARMED")
-        print("  [HUD] Closed Shadow-DOM Overlay: ACTIVE (Panic: Ctrl+Shift+X)")
-        print("  [ROUTER] Background Neural Router & Heartbeat: ONLINE")
-        print("=" * 65 + "\n")
-
-        while True:
-            try:
-                browser = await self.browser_manager.connect()
-                self.heartbeat = HeartbeatDaemon(browser)
-                await self.heartbeat.start()
-                self.brain_router = BrainRouter(browser)
-                break
-            except Exception as e:
-                await asyncio.sleep(2.5)
-
-        while True:
-            try:
-                await self._supervisory_cycle()
-            except Exception as e:
-                print(f"[DAEMON NOTICE] Cycle refreshed: {e}. Resuming in 3s...")
-                await asyncio.sleep(3)
+        """Supervise the selected tab; cancellation always releases resources."""
+        try:
+            while True:
+                try:
+                    self._emit("status", "Connecting to Chrome…")
+                    browser = await self.browser_manager.connect()
+                    self.heartbeat = HeartbeatDaemon(browser)
+                    await self.heartbeat.start()
+                    self.brain_router = BrainRouter(browser)
+                    break
+                except Exception as exc:
+                    self._emit("status", "Browser unavailable. Retrying in 3 seconds.")
+                    logging.warning("Browser connection failed: %s", exc)
+                    await asyncio.sleep(3)
+            while True:
+                try:
+                    await self._supervisory_cycle()
+                    if self.target_url:
+                        return
+                except Exception:
+                    logging.exception("Session cycle failed")
+                    self._emit("error", "Session failed. Stop and check the page and AI connection before retrying.")
+                    if self.target_url:
+                        return
+                    await asyncio.sleep(3)
+        finally:
+            if self.heartbeat:
+                await self.heartbeat.stop()
+            await self.browser_manager.disconnect()
 
     async def _supervisory_cycle(self):
         if not self._monitoring_announced:
@@ -82,8 +98,15 @@ class HyperSolveDaemon:
             self._monitoring_announced = True
 
         while True:
-            tabs = await self.browser_manager.scan_tabs()
-            quiz_tabs = tabs["quiz"]
+            if self.target_url:
+                target = await self.browser_manager.find_target_page(self.target_url, self.target_id)
+                quiz_tabs = [target] if target else []
+                if not quiz_tabs:
+                    self._emit("error", "The selected tab moved or closed. Choose the tab again.")
+                    return
+            else:
+                tabs = await self.browser_manager.scan_tabs()
+                quiz_tabs = tabs["quiz"]
             # Filter for uncompleted quizzes only
             active_quizzes = [
                 p for p in quiz_tabs
@@ -103,6 +126,7 @@ class HyperSolveDaemon:
         has_api_key = bool(os.getenv("GEMINI_API_KEY") or os.getenv("OPENAI_API_KEY"))
 
         if not has_ai and not has_api_key:
+            self._emit("error", "No AI provider available. Open and sign in to ChatGPT, Gemini, or Claude.")
             print("\n" + "=" * 65)
             print("  ⚠️  [ATTENTION] No AI provider tab (ChatGPT / Gemini) detected!")
             print("  Please make sure you are LOGGED IN to at least one:")
@@ -127,6 +151,8 @@ class HyperSolveDaemon:
             if attempt_id and attempt_id in self.completed_attempts:
                 continue
             await self._solve_quiz_tab(quiz_page)
+            if self.target_url:
+                return
 
         print("[STANDBY] Assessment cycle complete. Standing by for next quiz...\n")
         self._monitoring_announced = False
@@ -209,15 +235,18 @@ class HyperSolveDaemon:
         initial_questions = await UniversalA11yParser.parse_page(page)
         if not initial_questions:
             if "attempt.php" not in page.url:
+                self._emit("error", "No supported questions found. Open the question page and try again.")
                 await asyncio.sleep(2)
                 return
             await asyncio.sleep(1)
             initial_questions = await UniversalA11yParser.parse_page(page)
             if not initial_questions:
+                self._emit("error", "No supported questions found on this page. Wait for the page to load, then retry.")
                 print("[WAIT] No quiz questions found on this page yet (waiting for attempt to load)...")
                 await asyncio.sleep(2)
                 return
 
+        self._emit("status", "Reading questions from the selected tab…")
         print(f"\n[TARGET ATTACHED] {page.url[:75]}...")
         if self.on_target_attached:
             try:
@@ -287,10 +316,13 @@ class HyperSolveDaemon:
                 break
 
         if not harvested_questions:
+            self._emit("error", "No questions could be read from this page.")
             print("[WARN] No quiz questions found during survey.")
             await asyncio.sleep(2)
             return
 
+        self._emit("questions", [{"id": q.id, "text": q.text} for q in harvested_questions])
+        self._emit("status", "Waiting for the AI response…")
         print(f"\n[SURVEY COMPLETE] Successfully harvested {len(harvested_questions)} questions across {page_num} page(s)!")
 
         # -------------------------------------------------------------
@@ -303,6 +335,7 @@ class HyperSolveDaemon:
 
         answers, brain_used = await self.brain_router.solve_batch(harvested_questions)
         if not answers:
+            self._emit("error", "AI returned no usable answers. Check sign-in, usage limits, and the provider tab, then retry.")
             print(f"[ERROR] AI session returned no valid answers ({brain_used}).")
             await HUDInjector.update_stats(page, 0, len(harvested_questions), status="AI FAILED", brain=brain_used)
             await asyncio.sleep(3)
@@ -358,8 +391,6 @@ class HyperSolveDaemon:
                     continue
 
                 matched_opt = self._match_option(target_answer, q.options)
-                if not matched_opt and q.options:
-                    matched_opt = q.options[0]
 
                 if not matched_opt:
                     continue
@@ -370,11 +401,15 @@ class HyperSolveDaemon:
                     print(f"    [VERIFIED ✓] Q{matching_hq.id}: Option {matched_opt.index + 1} already correct ('{matched_opt.text[:35]}'). Skipping.")
                     total_verified += 1
                 else:
-                    await SyntheticInjector.select_option(page, matched_opt.ref_id, matched_opt.index)
+                    selected = await SyntheticInjector.select_option(page, matched_opt.ref_id, matched_opt.index)
+                    if not selected:
+                        self._emit("status", f"Could not select question {matching_hq.id}; skipped.")
+                        continue
                     total_injected += 1
-                    confidence = round(random.uniform(98.1, 99.8), 1)
-                    await HUDInjector.lock_answer(page, q.dom_id or "", matched_opt.ref_id, confidence, brain_used)
-                    print(f"    [LOCKED ⚡] Q{matching_hq.id} -> Option {matched_opt.index + 1}: {matched_opt.text[:35]} ({confidence}%)")
+                    await HUDInjector.lock_answer(page, q.dom_id or "", matched_opt.ref_id, None, brain_used)
+
+                self._emit("answer", {"id": matching_hq.id, "answer": matched_opt.text,
+                                       "done": total_injected + total_verified, "total": len(harvested_questions)})
 
                 await HUDInjector.update_stats(
                     page, total_injected + total_verified, len(harvested_questions),
@@ -420,6 +455,8 @@ class HyperSolveDaemon:
             else:
                 break
 
+        self._emit("complete", {"done": total_injected + total_verified,
+                                "total": len(harvested_questions), "brain": brain_used})
         # Register completed attempt to prevent any repeated loops
         if attempt_id:
             self.completed_attempts.add(attempt_id)

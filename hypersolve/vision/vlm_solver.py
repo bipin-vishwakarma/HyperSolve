@@ -1,6 +1,7 @@
 import os
 import re
 import json
+import math
 import base64
 import tempfile
 from dataclasses import dataclass
@@ -15,7 +16,7 @@ class VisionSolveResult:
     selected_answer: str
     x_percent: float  # 0.0 - 1.0 (X coordinate of the radio/choice button)
     y_percent: float  # 0.0 - 1.0 (Y coordinate of the radio/choice button)
-    confidence: float = 98.5
+    confidence: Optional[float] = None
     brain_used: str = "Zero-Key AI"
 
 class VLMSolver:
@@ -105,8 +106,9 @@ class VLMSolver:
         from hypersolve.router.session_pool import SessionPool
 
         # Save screenshot to temporary JPEG
-        temp_img_path = os.path.join(tempfile.gettempdir(), "hypersolve_screen.jpg")
-        img.save(temp_img_path, format="JPEG", quality=85)
+        with tempfile.NamedTemporaryFile(prefix="hypersolve-", suffix=".jpg", delete=False) as image_file:
+            temp_img_path = image_file.name
+            img.save(image_file, format="JPEG", quality=85)
 
         try:
             async with async_playwright() as p:
@@ -195,12 +197,22 @@ class VLMSolver:
             match = re.search(r'\{[\s\S]*\}', raw_text)
             if match:
                 data = json.loads(match.group(0))
+                x, y = float(data["x_percent"]), float(data["y_percent"])
+                if not all(math.isfinite(v) and 0 <= v <= 1 for v in (x, y)):
+                    return None
+                if not isinstance(data.get("answer"), str) or not data["answer"].strip():
+                    return None
+                confidence = data.get("confidence")
+                if confidence is not None:
+                    confidence = float(confidence)
+                    if not math.isfinite(confidence) or not 0 <= confidence <= 100:
+                        return None
                 return VisionSolveResult(
                     question=data.get("question", ""),
                     selected_answer=data.get("answer", ""),
-                    x_percent=float(data.get("x_percent", 0.5)),
-                    y_percent=float(data.get("y_percent", 0.5)),
-                    confidence=float(data.get("confidence", 98.5))
+                    x_percent=x,
+                    y_percent=y,
+                    confidence=confidence
                 )
         except Exception:
             pass

@@ -25,11 +25,12 @@ class BrowserManager:
 
     async def disconnect(self):
         """Close connection cleanly without terminating user browser."""
-        if self.browser:
-            await self.browser.close()
+        # Stop the CDP client, leaving the user's browser and tabs running.
+        try:
+            if self.playwright:
+                await self.playwright.stop()
+        finally:
             self.browser = None
-        if self.playwright:
-            await self.playwright.stop()
             self.playwright = None
 
     async def get_all_pages(self) -> List[Page]:
@@ -40,6 +41,20 @@ class BrowserManager:
         for ctx in self.browser.contexts:
             pages.extend(ctx.pages)
         return pages
+
+    async def find_target_page(self, target_url, target_id=None):
+        for page in await self.get_all_pages():
+            if target_id:
+                session = await page.context.new_cdp_session(page)
+                try:
+                    info = await session.send("Target.getTargetInfo")
+                    if info["targetInfo"]["targetId"] == target_id:
+                        return page
+                finally:
+                    await session.detach()
+            elif page.url == target_url:
+                return page
+        return None
 
     async def scan_tabs(self) -> Dict[str, List[Page]]:
         """

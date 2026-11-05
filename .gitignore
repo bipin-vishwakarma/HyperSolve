@@ -32,3 +32,10 @@ scratch/
 Thumbs.db
 .vscode/
 .idea/
+
+# Local builds and audit artifacts
+build/
+dist/
+dist_installer/
+.audit/
+.impeccable/questions/

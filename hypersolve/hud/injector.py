@@ -46,9 +46,9 @@ class HUDInjector:
             pass
 
     @classmethod
-    async def lock_answer(cls, page: Page, dom_id: str, opt_marker: str, confidence: float = 98.4, brain: str = "DeepSeek-R1"):
+    async def lock_answer(cls, page: Page, dom_id: str, opt_marker: str, confidence=None, brain: str = "AI"):
         """Displays the confidence badge and applies the lock aura to the correct option."""
         try:
-            await page.evaluate(f"window.__hypersolve && window.__hypersolve.lockAnswer('{dom_id}', '{opt_marker}', {confidence}, '{brain}')")
+            await page.evaluate("args => window.__hypersolve?.lockAnswer(...args)", [dom_id, opt_marker, confidence, brain])
         except Exception:
             pass
