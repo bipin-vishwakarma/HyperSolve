@@ -306,8 +306,20 @@ class HyperSolveTrayApp:
     def _on_quit(self):
         if self.daemon and self.loop:
             self.loop.call_soon_threadsafe(self.loop.stop)
+        try:
+            import psutil
+            for proc in psutil.process_iter(['pid', 'name', 'cmdline']):
+                try:
+                    if proc.info['name'] and 'chrome' in proc.info['name'].lower():
+                        cmd = ' '.join(proc.info['cmdline'] or [])
+                        if 'chrome_profile' in cmd or '--remote-debugging-port=9222' in cmd:
+                            proc.kill()
+                except (psutil.NoSuchProcess, psutil.AccessDenied):
+                    pass
+        except Exception:
+            pass
         QApplication.quit()
-        sys.exit(0)
+        os._exit(0)
 
 def run_tray():
     if sys.platform == "win32":

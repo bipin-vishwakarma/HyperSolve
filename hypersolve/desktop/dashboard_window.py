@@ -180,7 +180,7 @@ class HyperSolveDashboard(QWidget):
         close_btn = QPushButton("✕")
         close_btn.setFixedSize(28, 28)
         close_btn.setStyleSheet("QPushButton { background-color: #1e293b; color: #94a3b8; border-radius: 6px; font-weight: bold; border: none; } QPushButton:hover { background-color: #ef4444; color: white; }")
-        close_btn.clicked.connect(self.hide)
+        close_btn.clicked.connect(self._on_exit)
         title_bar.addWidget(close_btn)
         layout.addLayout(title_bar)
 
@@ -250,8 +250,13 @@ class HyperSolveDashboard(QWidget):
 
         self.panic_btn = QPushButton("👻 Emergency Panic (Ctrl+Shift+X)")
         self.panic_btn.setStyleSheet(self._action_btn_style("#dc2626", "#b91c1c"))
-        self.panic_btn.clicked.connect(self.hide)
+        self.panic_btn.clicked.connect(self._panic_hide)
         btn_bar.addWidget(self.panic_btn)
+
+        self.quit_btn = QPushButton("⏹️ Quit App & Close Browser")
+        self.quit_btn.setStyleSheet(self._action_btn_style("#475569", "#334155"))
+        self.quit_btn.clicked.connect(self._on_exit)
+        btn_bar.addWidget(self.quit_btn)
 
         layout.addLayout(btn_bar)
         outer.addWidget(self.container)
@@ -693,6 +698,52 @@ class HyperSolveDashboard(QWidget):
 
         t = threading.Thread(target=runner, daemon=True, name="HyperSolve-Daemon-Worker")
         t.start()
+
+    def _panic_hide(self):
+        """Emergency Panic: immediately vanishes the window from screen."""
+        self.hide()
+
+    def closeEvent(self, event):
+        """Handle standard window close (Alt+F4 or system close button)."""
+        self._on_exit()
+        event.accept()
+
+    def _kill_exam_chrome(self):
+        """Terminates ONLY the dedicated Chrome instance attached to port 9222 / chrome_profile."""
+        try:
+            import psutil
+            for proc in psutil.process_iter(['pid', 'name', 'cmdline']):
+                try:
+                    if proc.info['name'] and 'chrome' in proc.info['name'].lower():
+                        cmd = ' '.join(proc.info['cmdline'] or [])
+                        if 'chrome_profile' in cmd or '--remote-debugging-port=9222' in cmd:
+                            proc.kill()
+                except (psutil.NoSuchProcess, psutil.AccessDenied):
+                    pass
+        except Exception:
+            pass
+
+    def _on_exit(self):
+        """Cleanly and completely shut down HyperSolve, background loops, exam Chrome, and exit."""
+        self.hide()
+        try:
+            if self.daemon and self.loop:
+                self.loop.call_soon_threadsafe(self.loop.stop)
+            if self.daemon and self.daemon.browser_manager:
+                if self.loop and self.loop.is_running():
+                    try:
+                        asyncio.run_coroutine_threadsafe(self.daemon.browser_manager.disconnect(), self.loop)
+                    except Exception:
+                        pass
+        except Exception:
+            pass
+
+        # Terminate the isolated exam Chrome instance
+        self._kill_exam_chrome()
+
+        QApplication.quit()
+        # Hard exit to ensure no background threads or asyncio loops linger in Windows
+        os._exit(0)
 
 
 def run_dashboard():
