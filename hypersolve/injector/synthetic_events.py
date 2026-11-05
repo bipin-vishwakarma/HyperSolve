@@ -33,7 +33,9 @@ class SyntheticInjector:
         # 2. Enforce selection via synthetic event chain & DOM events
         # This guarantees that even if the radio is custom-styled with opacity: 0,
         # the radio input is checked and the change/input events fire for Moodle autosave.
-        success = await page.evaluate(f"""(marker, index) => {{
+        success = await page.evaluate(f"""() => {{
+            const marker = "{opt_marker}";
+            const index = {opt_index};
             const input = document.querySelector(`[data-hypersolve-opt="${{marker}}"]`);
             if (!input) return false;
 
@@ -72,10 +74,7 @@ class SyntheticInjector:
             }} catch(e) {{}}
 
             return true;
-        }}""", opt_marker, opt_index)
-
-        await asyncio.sleep(random.uniform(0.1, 0.25))
-        return success
+        }}""")
 
         await asyncio.sleep(random.uniform(0.1, 0.25))
         return success
