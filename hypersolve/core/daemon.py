@@ -33,12 +33,22 @@ class HyperSolveDaemon:
     - Background Neural Routing (Zero Tab-Bouncing)
     """
 
-    def __init__(self, cdp_url: str = "http://127.0.0.1:9222"):
+    def __init__(
+        self,
+        cdp_url: str = "http://127.0.0.1:9222",
+        on_status_change: Optional[Callable[[str], None]] = None,
+        on_target_attached: Optional[Callable[[str], None]] = None,
+        on_solved: Optional[Callable[[int, int, str], None]] = None,
+    ):
         self.browser_manager = BrowserManager(cdp_url)
         self.heartbeat: Optional[HeartbeatDaemon] = None
         self.brain_router: Optional[BrainRouter] = None
         self.completed_attempts: Set[str] = set()
         self._monitoring_announced: bool = False
+        self.on_status_change = on_status_change
+        self.on_target_attached = on_target_attached
+        self.on_solved = on_solved
+        self.target_accuracy: float = 1.0
 
     async def start(self):
         """Starts the daemon in a perpetual supervisor loop."""
@@ -204,6 +214,11 @@ class HyperSolveDaemon:
                 return
 
         print(f"\n[TARGET ATTACHED] {page.url[:75]}...")
+        if self.on_target_attached:
+            try:
+                self.on_target_attached(page.url)
+            except Exception:
+                pass
         await GhostShield.arm(page)
         await HUDInjector.inject(page)
         await HUDInjector.update_stats(page, 0, 0, status="STARTING SURVEY")
@@ -373,6 +388,11 @@ class HyperSolveDaemon:
                     page, len(harvested_questions), len(harvested_questions),
                     status="ALL COMPLETE", brain=brain_used
                 )
+                if self.on_solved:
+                    try:
+                        self.on_solved(total_injected + total_verified, len(harvested_questions), brain_used)
+                    except Exception:
+                        pass
                 try:
                     async with page.expect_navigation(wait_until="domcontentloaded", timeout=10000):
                         await finish_btn.click()

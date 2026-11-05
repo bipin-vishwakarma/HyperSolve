@@ -6,6 +6,7 @@ class GhostShield:
     Spoofs document.visibilityState, intercepts blur/visibilitychange events,
     and removes warning banners from the DOM.
     """
+    is_enabled: bool = True
 
     SHIELD_SCRIPT = r"""(() => {
         if (window.__ghost_shield_active) return;
@@ -54,6 +55,8 @@ class GhostShield:
     @classmethod
     async def arm(cls, page: Page):
         """Arm Ghost Shield immediately in the live page context."""
+        if not cls.is_enabled:
+            return
         try:
             await page.evaluate(cls.SHIELD_SCRIPT)
         except Exception:
