@@ -38,6 +38,7 @@ class HyperSolveDaemon:
         self.heartbeat: Optional[HeartbeatDaemon] = None
         self.brain_router: Optional[BrainRouter] = None
         self.completed_attempts: Set[str] = set()
+        self._monitoring_announced: bool = False
 
     async def start(self):
         """Starts the daemon in a perpetual supervisor loop."""
@@ -61,13 +62,25 @@ class HyperSolveDaemon:
                 await asyncio.sleep(3)
 
     async def _supervisory_cycle(self):
-        print(">>> [MONITORING] Scanning tabs for active assessments...")
+        if not self._monitoring_announced:
+            print(">>> [MONITORING] Standing by for active assessments...")
+            self._monitoring_announced = True
+
         while True:
             tabs = await self.browser_manager.scan_tabs()
             quiz_tabs = tabs["quiz"]
-            if quiz_tabs:
+            # Filter for uncompleted quizzes only
+            active_quizzes = [
+                p for p in quiz_tabs
+                if not p.is_closed() and self._get_attempt_id(p.url) not in self.completed_attempts
+            ]
+            if active_quizzes:
+                quiz_tabs = active_quizzes
                 break
-            await asyncio.sleep(2)
+            await asyncio.sleep(2.5)
+
+        # Active assessment detected
+        self._monitoring_announced = False
 
         # Check AI provider availability
         providers = await self.brain_router.session_pool.get_active_providers() if self.brain_router and self.brain_router.session_pool else {}
@@ -99,6 +112,9 @@ class HyperSolveDaemon:
             if attempt_id and attempt_id in self.completed_attempts:
                 continue
             await self._solve_quiz_tab(quiz_page)
+
+        print("[STANDBY] Assessment cycle complete. Standing by for next quiz...\n")
+        self._monitoring_announced = False
 
     def _get_attempt_id(self, url: str) -> Optional[str]:
         m = re.search(r'attempt=(\d+)', url)
