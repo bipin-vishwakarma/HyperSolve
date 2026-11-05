@@ -4,7 +4,7 @@ import asyncio
 import random
 import sys
 from urllib.parse import urlparse, parse_qs, urlencode, urlunparse
-from typing import Dict, List, Optional, Set
+from typing import Dict, List, Optional, Set, Callable
 from playwright.async_api import Page
 
 # Force UTF-8 on Windows terminal to prevent UnicodeEncodeError
@@ -59,10 +59,15 @@ class HyperSolveDaemon:
         print("  [ROUTER] Background Neural Router & Heartbeat: ONLINE")
         print("=" * 65 + "\n")
 
-        browser = await self.browser_manager.connect()
-        self.heartbeat = HeartbeatDaemon(browser)
-        await self.heartbeat.start()
-        self.brain_router = BrainRouter(browser)
+        while True:
+            try:
+                browser = await self.browser_manager.connect()
+                self.heartbeat = HeartbeatDaemon(browser)
+                await self.heartbeat.start()
+                self.brain_router = BrainRouter(browser)
+                break
+            except Exception as e:
+                await asyncio.sleep(2.5)
 
         while True:
             try:

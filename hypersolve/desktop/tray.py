@@ -310,7 +310,19 @@ class HyperSolveTrayApp:
         sys.exit(0)
 
 def run_tray():
+    if sys.platform == "win32":
+        try:
+            import ctypes
+            ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID("HyperSolve.AutonomousEngine.Tray.2.0")
+            hwnd = ctypes.windll.kernel32.GetConsoleWindow()
+            if hwnd:
+                ctypes.windll.user32.ShowWindow(hwnd, 0)
+        except Exception:
+            pass
+
     app = QApplication(sys.argv)
+    app.setApplicationName("HyperSolve System Tray")
+    app.setApplicationDisplayName("HyperSolve System Tray")
     app.setQuitOnLastWindowClosed(False)
     tray = HyperSolveTrayApp()
     sys.exit(app.exec())

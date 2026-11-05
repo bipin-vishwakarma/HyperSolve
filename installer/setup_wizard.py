@@ -83,12 +83,13 @@ DARK_STYLE = """
     }
 """
 
-def create_windows_shortcut(target: str, shortcut_path: str, working_dir: str, icon_path: str, description: str):
+def create_windows_shortcut(target: str, shortcut_path: str, working_dir: str, icon_path: str, description: str, arguments: str = ""):
     """Creates a native Windows .lnk shortcut via WScript.Shell without external C dependencies."""
     ps_script = f"""
     $WshShell = New-Object -comObject WScript.Shell
     $Shortcut = $WshShell.CreateShortcut("{shortcut_path}")
     $Shortcut.TargetPath = "{target}"
+    $Shortcut.Arguments = "{arguments}"
     $Shortcut.WorkingDirectory = "{working_dir}"
     $Shortcut.IconLocation = "{icon_path},0"
     $Shortcut.Description = "{description}"
@@ -204,7 +205,9 @@ class InstallProgressPage(QWizardPage):
             # Copy launcher batch / scripts
             launcher_path = os.path.join(INSTALL_DIR, "HyperSolve.bat")
             with open(launcher_path, "w", encoding="utf-8") as f:
-                f.write(f"@echo off\ncd /d \"{REPO_DIR}\"\nstart python -m hypersolve.desktop.dashboard_window\n")
+                f.write(f"@echo off\ncd /d \"{REPO_DIR}\"\nstart pythonw -m hypersolve.desktop.dashboard_window\nexit\n")
+
+            pythonw_exe = sys.executable.replace("python.exe", "pythonw.exe") if "python.exe" in sys.executable else sys.executable
 
             # 3. Create Desktop shortcut
             opts = self.wizard().options_page
@@ -213,11 +216,12 @@ class InstallProgressPage(QWizardPage):
                 self.detail_lbl.setText("Creating Desktop Icon...")
                 self.progress.setValue(75)
                 create_windows_shortcut(
-                    target=launcher_path,
+                    target=pythonw_exe,
+                    arguments="-m hypersolve.desktop.dashboard_window",
                     shortcut_path=os.path.join(desktop_dir, "HyperSolve.lnk"),
                     working_dir=REPO_DIR,
                     icon_path=ICON_PATH,
-                    description="HyperSolve v2.0 - Universal Assessment Engine"
+                    description="HyperSolve Command Center v2.0"
                 )
 
             # 4. Create Start Menu shortcut
@@ -227,11 +231,12 @@ class InstallProgressPage(QWizardPage):
                 self.progress.setValue(90)
                 os.makedirs(start_menu_dir, exist_ok=True)
                 create_windows_shortcut(
-                    target=launcher_path,
+                    target=pythonw_exe,
+                    arguments="-m hypersolve.desktop.dashboard_window",
                     shortcut_path=os.path.join(start_menu_dir, "HyperSolve.lnk"),
                     working_dir=REPO_DIR,
                     icon_path=ICON_PATH,
-                    description="HyperSolve v2.0 - Universal Assessment Engine"
+                    description="HyperSolve Command Center v2.0"
                 )
 
             self.progress.setValue(100)
