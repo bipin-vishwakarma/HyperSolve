@@ -1,74 +1,27 @@
 # -*- mode: python ; coding: utf-8 -*-
-import os
-import sys
-
-block_cipher = None
+from pathlib import Path
+root = Path(SPECPATH).parent
 
 a = Analysis(
-    ['../main.py'],
-    pathex=['..'],
+    [str(root / 'main.py')], pathex=[str(root)],
     binaries=[],
-    datas=[
-        ('../hypersolve/hud/assets', 'hypersolve/hud/assets'),
-    ],
-    hiddenimports=[
-        'playwright',
-        'playwright.async_api',
-        'requests',
-        'urllib.parse',
-        'hypersolve',
-        'hypersolve.core.daemon',
-        'hypersolve.router.brain_router',
-        'hypersolve.router.session_pool',
-        'hypersolve.parser.a11y_engine',
-        'hypersolve.injector.synthetic_events',
-        'hypersolve.stealth.ghost_shield',
-        'hypersolve.hud.injector',
-        'hypersolve.updater.engine',
-        'hypersolve.desktop.tray',
-        'hypersolve.desktop.dashboard_window',
-        'PyQt6',
-        'PyQt6.QtWidgets',
-        'PyQt6.QtGui',
-        'PyQt6.QtCore',
-    ],
-    hookspath=[],
-    hooksconfig={},
-    runtime_hooks=[],
-    excludes=['tkinter', 'matplotlib', 'scipy'],
-    win_no_prefer_redirects=False,
-    win_private_assemblies=False,
-    cipher=block_cipher,
-    noarchive=False,
+    datas=[(str(root / 'hypersolve/assets'), 'hypersolve/assets'),
+           (str(root / 'hypersolve/hud/assets'), 'hypersolve/hud/assets'),
+           (str(root / 'hypersolve/parser/dom_parser.js'), 'hypersolve/parser')],
+    hiddenimports=['hypersolve.desktop.dashboard_window', 'playwright.async_api'],
+    hookspath=[], hooksconfig={}, runtime_hooks=[],
+    excludes=['tkinter', 'matplotlib', 'scipy', 'PyQt5', 'PySide6'], noarchive=False,
 )
-
-pyz = PYZ(a.pure, a.zipped_data, cipher=block_cipher)
-
-exe = EXE(
-    pyz,
-    a.scripts,
-    [],
-    exclude_binaries=True,
-    name='HyperSolve',
-    debug=False,
-    bootloader_ignore_signals=False,
-    strip=False,
-    upx=True,
-    console=True,
-    disable_windowed_traceback=False,
-    argv_emulation=False,
-    target_arch=None,
-    codesign_identity=None,
-    entitlements_file=None,
-)
-
-coll = COLLECT(
-    exe,
-    a.binaries,
-    a.zipfiles,
-    a.datas,
-    strip=False,
-    upx=True,
-    upx_exclude=[],
-    name='HyperSolve',
-)
+pyz = PYZ(a.pure)
+exe = EXE(pyz, a.scripts, [], exclude_binaries=True, name='HyperSolve',
+          debug=False, strip=False, upx=False, console=False,
+          icon=str(root / 'hypersolve/assets/hypersolve.ico'),
+          version=str(root / 'installer/version_info.txt'))
+bridge_analysis = Analysis([str(root / 'bridge_main.py')], pathex=[str(root)],
+    binaries=[], datas=[], hiddenimports=[], hookspath=[], hooksconfig={}, runtime_hooks=[],
+    excludes=['tkinter','matplotlib','scipy','PyQt5','PySide6'], noarchive=False)
+bridge = EXE(PYZ(bridge_analysis.pure), bridge_analysis.scripts, [], exclude_binaries=True,
+             name='HyperSolveBridge', debug=False, strip=False, upx=False, console=True,
+             icon=str(root / 'hypersolve/assets/hypersolve.ico'))
+coll = COLLECT(exe, bridge, a.binaries, a.datas, bridge_analysis.binaries, bridge_analysis.datas,
+               strip=False, upx=False, name='HyperSolve')

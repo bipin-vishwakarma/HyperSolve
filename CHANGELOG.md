@@ -1,3 +1,44 @@
+# 3.0.0 — Browser companion and native agent manager
+
+- Make the native manager the primary view, with real per-tab counts and approval, pause/resume, and stop controls.
+- Add an MV3 Chrome/Edge companion, authenticated native bridge, installer registration, extension assets, and companion ZIP.
+- Automatically detect supported quizzes; ask approval before scanning/sending questions or selecting answers.
+- Run independent tab agents, limited parallel API jobs, and queued browser AI jobs in separate conversations.
+- Add a visible glass panel with phase transitions, reduced-motion support, explanations, copying, dragging, and collapse controls.
+- Reject fuzzy/ambiguous matches, malformed/duplicate IDs, and uncertain answers; leave them for review.
+- Bind work to the approved quiz scope and fresh option identities. Use Next to preserve multi-page form selections; never submit in companion mode.
+- Save and restore everyday-browser tab/pin snapshots from the popup.
+- Live provider compatibility/accuracy remain unverified. Browser setup requires loading the unpacked companion once.
+
+# 2.3.0 — Visible interactive session overlay
+
+- Keep the browser panel visible through harvesting, solving, selection, navigation, and completion.
+- Add Pause/Resume, Stop, Show question, Copy answers, Collapse/Expand, dragging and keyboard positioning.
+- Preserve panel state and selected answers across quiz pages; use generation-aware control bindings for restarted sessions.
+- Protect automated option clicks from hitting the overlay, and keep controls reachable in small viewports.
+- Synchronize paused state with the desktop and preserve shutdown cleanup during cancellation.
+
+# 2.2.0 — Saved workspaces and automation
+
+- Save and restore local web-tab snapshots while retaining the Chrome profile.
+- Add manually started automatic quiz detection alongside selected-tab sessions.
+- Detect supported question structures instead of relying only on URL keywords.
+- Keep watching after a completed quiz; stop on terminal provider errors.
+- Preserve quiz query/hash identities and show restore failures per tab.
+
+# 2.1.0 — Windows desktop refresh
+
+- Replace the decorative command centre with Workspace, Connections, and Settings.
+- Add explicit tab selection, Start/Stop, real engine events, persistent window geometry, optional close-to-tray, and single-instance restoration.
+- Share one app lifecycle across desktop and tray; leave Chrome open on exit.
+- Add an authored multi-resolution icon, executable version metadata, and a bundled GUI entry point.
+- Replace source-linked setup with a per-user standalone installer and reproducible Windows build.
+- Require a trusted release checksum before launching updates; surface failures in the UI.
+- Remove generated confidence percentages and first-option fallback; reject malformed vision coordinates and overlapping screenshot operations.
+- Add offline regression checks. Live provider compatibility remains separately unverified.
+
+---
+
 # 📜 HyperSolve Changelog
 
 All notable changes to the **HyperSolve** project will be documented in this file.

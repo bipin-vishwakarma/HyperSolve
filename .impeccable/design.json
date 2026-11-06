@@ -1,0 +1,505 @@
+{
+  "schemaVersion": 2,
+  "generatedAt": "2026-11-05T19:14:00.628135+00:00",
+  "title": "Design System: HyperSolve Desktop",
+  "extensions": {
+    "colorMeta": {
+      "primary": {
+        "role": "primary",
+        "displayName": "Primary",
+        "canonical": "#3759dc",
+        "tonalRamp": [
+          "oklch(15.00% 0.20352 267.50)",
+          "oklch(26.43% 0.20352 267.50)",
+          "oklch(37.86% 0.20352 267.50)",
+          "oklch(49.29% 0.20352 267.50)",
+          "oklch(60.71% 0.20352 267.50)",
+          "oklch(72.14% 0.20352 267.50)",
+          "oklch(83.57% 0.20352 267.50)",
+          "oklch(95.00% 0.20352 267.50)"
+        ]
+      },
+      "primary-hover": {
+        "role": "primary",
+        "displayName": "Primary Hover",
+        "canonical": "#2945b5",
+        "tonalRamp": [
+          "oklch(15.00% 0.18001 267.46)",
+          "oklch(26.43% 0.18001 267.46)",
+          "oklch(37.86% 0.18001 267.46)",
+          "oklch(49.29% 0.18001 267.46)",
+          "oklch(60.71% 0.18001 267.46)",
+          "oklch(72.14% 0.18001 267.46)",
+          "oklch(83.57% 0.18001 267.46)",
+          "oklch(95.00% 0.18001 267.46)"
+        ]
+      },
+      "focus": {
+        "role": "primary",
+        "displayName": "Focus",
+        "canonical": "#3759dc",
+        "tonalRamp": [
+          "oklch(15.00% 0.20352 267.50)",
+          "oklch(26.43% 0.20352 267.50)",
+          "oklch(37.86% 0.20352 267.50)",
+          "oklch(49.29% 0.20352 267.50)",
+          "oklch(60.71% 0.20352 267.50)",
+          "oklch(72.14% 0.20352 267.50)",
+          "oklch(83.57% 0.20352 267.50)",
+          "oklch(95.00% 0.20352 267.50)"
+        ]
+      },
+      "status-text": {
+        "role": "primary",
+        "displayName": "Status Text",
+        "canonical": "#3c4f83",
+        "tonalRamp": [
+          "oklch(15.00% 0.08932 267.48)",
+          "oklch(26.43% 0.08932 267.48)",
+          "oklch(37.86% 0.08932 267.48)",
+          "oklch(49.29% 0.08932 267.48)",
+          "oklch(60.71% 0.08932 267.48)",
+          "oklch(72.14% 0.08932 267.48)",
+          "oklch(83.57% 0.08932 267.48)",
+          "oklch(95.00% 0.08932 267.48)"
+        ]
+      },
+      "status-surface": {
+        "role": "primary",
+        "displayName": "Status Surface",
+        "canonical": "#e9edfb",
+        "tonalRamp": [
+          "oklch(15.00% 0.01932 273.23)",
+          "oklch(26.43% 0.01932 273.23)",
+          "oklch(37.86% 0.01932 273.23)",
+          "oklch(49.29% 0.01932 273.23)",
+          "oklch(60.71% 0.01932 273.23)",
+          "oklch(72.14% 0.01932 273.23)",
+          "oklch(83.57% 0.01932 273.23)",
+          "oklch(95.00% 0.01932 273.23)"
+        ]
+      },
+      "workspace": {
+        "role": "neutral",
+        "displayName": "Workspace",
+        "canonical": "#f3f4f8",
+        "tonalRamp": [
+          "oklch(15.00% 0.00543 274.97)",
+          "oklch(26.43% 0.00543 274.97)",
+          "oklch(37.86% 0.00543 274.97)",
+          "oklch(49.29% 0.00543 274.97)",
+          "oklch(60.71% 0.00543 274.97)",
+          "oklch(72.14% 0.00543 274.97)",
+          "oklch(83.57% 0.00543 274.97)",
+          "oklch(95.00% 0.00543 274.97)"
+        ]
+      },
+      "surface": {
+        "role": "neutral",
+        "displayName": "Surface",
+        "canonical": "#ffffff",
+        "tonalRamp": [
+          "oklch(15.00% 0.00000 89.88)",
+          "oklch(26.43% 0.00000 89.88)",
+          "oklch(37.86% 0.00000 89.88)",
+          "oklch(49.29% 0.00000 89.88)",
+          "oklch(60.71% 0.00000 89.88)",
+          "oklch(72.14% 0.00000 89.88)",
+          "oklch(83.57% 0.00000 89.88)",
+          "oklch(95.00% 0.00000 89.88)"
+        ]
+      },
+      "sidebar": {
+        "role": "neutral",
+        "displayName": "Sidebar",
+        "canonical": "#191e2e",
+        "tonalRamp": [
+          "oklch(15.00% 0.03176 270.53)",
+          "oklch(26.43% 0.03176 270.53)",
+          "oklch(37.86% 0.03176 270.53)",
+          "oklch(49.29% 0.03176 270.53)",
+          "oklch(60.71% 0.03176 270.53)",
+          "oklch(72.14% 0.03176 270.53)",
+          "oklch(83.57% 0.03176 270.53)",
+          "oklch(95.00% 0.03176 270.53)"
+        ]
+      },
+      "sidebar-text": {
+        "role": "neutral",
+        "displayName": "Sidebar Text",
+        "canonical": "#bdc5d9",
+        "tonalRamp": [
+          "oklch(15.00% 0.02938 268.32)",
+          "oklch(26.43% 0.02938 268.32)",
+          "oklch(37.86% 0.02938 268.32)",
+          "oklch(49.29% 0.02938 268.32)",
+          "oklch(60.71% 0.02938 268.32)",
+          "oklch(72.14% 0.02938 268.32)",
+          "oklch(83.57% 0.02938 268.32)",
+          "oklch(95.00% 0.02938 268.32)"
+        ]
+      },
+      "sidebar-hover": {
+        "role": "neutral",
+        "displayName": "Sidebar Hover",
+        "canonical": "#252c42",
+        "tonalRamp": [
+          "oklch(15.00% 0.04137 270.22)",
+          "oklch(26.43% 0.04137 270.22)",
+          "oklch(37.86% 0.04137 270.22)",
+          "oklch(49.29% 0.04137 270.22)",
+          "oklch(60.71% 0.04137 270.22)",
+          "oklch(72.14% 0.04137 270.22)",
+          "oklch(83.57% 0.04137 270.22)",
+          "oklch(95.00% 0.04137 270.22)"
+        ]
+      },
+      "sidebar-selected": {
+        "role": "neutral",
+        "displayName": "Sidebar Selected",
+        "canonical": "#313c60",
+        "tonalRamp": [
+          "oklch(15.00% 0.06411 270.09)",
+          "oklch(26.43% 0.06411 270.09)",
+          "oklch(37.86% 0.06411 270.09)",
+          "oklch(49.29% 0.06411 270.09)",
+          "oklch(60.71% 0.06411 270.09)",
+          "oklch(72.14% 0.06411 270.09)",
+          "oklch(83.57% 0.06411 270.09)",
+          "oklch(95.00% 0.06411 270.09)"
+        ]
+      },
+      "text": {
+        "role": "neutral",
+        "displayName": "Text",
+        "canonical": "#24293b",
+        "tonalRamp": [
+          "oklch(15.00% 0.03394 272.13)",
+          "oklch(26.43% 0.03394 272.13)",
+          "oklch(37.86% 0.03394 272.13)",
+          "oklch(49.29% 0.03394 272.13)",
+          "oklch(60.71% 0.03394 272.13)",
+          "oklch(72.14% 0.03394 272.13)",
+          "oklch(83.57% 0.03394 272.13)",
+          "oklch(95.00% 0.03394 272.13)"
+        ]
+      },
+      "title": {
+        "role": "neutral",
+        "displayName": "Title",
+        "canonical": "#1d2335",
+        "tonalRamp": [
+          "oklch(15.00% 0.03513 269.70)",
+          "oklch(26.43% 0.03513 269.70)",
+          "oklch(37.86% 0.03513 269.70)",
+          "oklch(49.29% 0.03513 269.70)",
+          "oklch(60.71% 0.03513 269.70)",
+          "oklch(72.14% 0.03513 269.70)",
+          "oklch(83.57% 0.03513 269.70)",
+          "oklch(95.00% 0.03513 269.70)"
+        ]
+      },
+      "muted": {
+        "role": "neutral",
+        "displayName": "Muted",
+        "canonical": "#606b82",
+        "tonalRamp": [
+          "oklch(15.00% 0.03874 264.97)",
+          "oklch(26.43% 0.03874 264.97)",
+          "oklch(37.86% 0.03874 264.97)",
+          "oklch(49.29% 0.03874 264.97)",
+          "oklch(60.71% 0.03874 264.97)",
+          "oklch(72.14% 0.03874 264.97)",
+          "oklch(83.57% 0.03874 264.97)",
+          "oklch(95.00% 0.03874 264.97)"
+        ]
+      },
+      "panel-border": {
+        "role": "neutral",
+        "displayName": "Panel Border",
+        "canonical": "#dfe3ed",
+        "tonalRamp": [
+          "oklch(15.00% 0.01424 268.49)",
+          "oklch(26.43% 0.01424 268.49)",
+          "oklch(37.86% 0.01424 268.49)",
+          "oklch(49.29% 0.01424 268.49)",
+          "oklch(60.71% 0.01424 268.49)",
+          "oklch(72.14% 0.01424 268.49)",
+          "oklch(83.57% 0.01424 268.49)",
+          "oklch(95.00% 0.01424 268.49)"
+        ]
+      },
+      "control-border": {
+        "role": "neutral",
+        "displayName": "Control Border",
+        "canonical": "#c2c9da",
+        "tonalRamp": [
+          "oklch(15.00% 0.02492 267.89)",
+          "oklch(26.43% 0.02492 267.89)",
+          "oklch(37.86% 0.02492 267.89)",
+          "oklch(49.29% 0.02492 267.89)",
+          "oklch(60.71% 0.02492 267.89)",
+          "oklch(72.14% 0.02492 267.89)",
+          "oklch(83.57% 0.02492 267.89)",
+          "oklch(95.00% 0.02492 267.89)"
+        ]
+      },
+      "control-hover": {
+        "role": "neutral",
+        "displayName": "Control Hover",
+        "canonical": "#eceffa",
+        "tonalRamp": [
+          "oklch(15.00% 0.01510 273.85)",
+          "oklch(26.43% 0.01510 273.85)",
+          "oklch(37.86% 0.01510 273.85)",
+          "oklch(49.29% 0.01510 273.85)",
+          "oklch(60.71% 0.01510 273.85)",
+          "oklch(72.14% 0.01510 273.85)",
+          "oklch(83.57% 0.01510 273.85)",
+          "oklch(95.00% 0.01510 273.85)"
+        ]
+      },
+      "control-border-hover": {
+        "role": "neutral",
+        "displayName": "Control Border Hover",
+        "canonical": "#8d9ab8",
+        "tonalRamp": [
+          "oklch(15.00% 0.04675 266.71)",
+          "oklch(26.43% 0.04675 266.71)",
+          "oklch(37.86% 0.04675 266.71)",
+          "oklch(49.29% 0.04675 266.71)",
+          "oklch(60.71% 0.04675 266.71)",
+          "oklch(72.14% 0.04675 266.71)",
+          "oklch(83.57% 0.04675 266.71)",
+          "oklch(95.00% 0.04675 266.71)"
+        ]
+      },
+      "control-pressed": {
+        "role": "neutral",
+        "displayName": "Control Pressed",
+        "canonical": "#e1e6f5",
+        "tonalRamp": [
+          "oklch(15.00% 0.02102 271.19)",
+          "oklch(26.43% 0.02102 271.19)",
+          "oklch(37.86% 0.02102 271.19)",
+          "oklch(49.29% 0.02102 271.19)",
+          "oklch(60.71% 0.02102 271.19)",
+          "oklch(72.14% 0.02102 271.19)",
+          "oklch(83.57% 0.02102 271.19)",
+          "oklch(95.00% 0.02102 271.19)"
+        ]
+      },
+      "disabled": {
+        "role": "neutral",
+        "displayName": "Disabled",
+        "canonical": "#e7eaf1",
+        "tonalRamp": [
+          "oklch(15.00% 0.00997 267.36)",
+          "oklch(26.43% 0.00997 267.36)",
+          "oklch(37.86% 0.00997 267.36)",
+          "oklch(49.29% 0.00997 267.36)",
+          "oklch(60.71% 0.00997 267.36)",
+          "oklch(72.14% 0.00997 267.36)",
+          "oklch(83.57% 0.00997 267.36)",
+          "oklch(95.00% 0.00997 267.36)"
+        ]
+      },
+      "disabled-border": {
+        "role": "neutral",
+        "displayName": "Disabled Border",
+        "canonical": "#d8deea",
+        "tonalRamp": [
+          "oklch(15.00% 0.01763 264.48)",
+          "oklch(26.43% 0.01763 264.48)",
+          "oklch(37.86% 0.01763 264.48)",
+          "oklch(49.29% 0.01763 264.48)",
+          "oklch(60.71% 0.01763 264.48)",
+          "oklch(72.14% 0.01763 264.48)",
+          "oklch(83.57% 0.01763 264.48)",
+          "oklch(95.00% 0.01763 264.48)"
+        ]
+      },
+      "disabled-text": {
+        "role": "neutral",
+        "displayName": "Disabled Text",
+        "canonical": "#6c7589",
+        "tonalRamp": [
+          "oklch(15.00% 0.03286 266.15)",
+          "oklch(26.43% 0.03286 266.15)",
+          "oklch(37.86% 0.03286 266.15)",
+          "oklch(49.29% 0.03286 266.15)",
+          "oklch(60.71% 0.03286 266.15)",
+          "oklch(72.14% 0.03286 266.15)",
+          "oklch(83.57% 0.03286 266.15)",
+          "oklch(95.00% 0.03286 266.15)"
+        ]
+      },
+      "progress-track": {
+        "role": "neutral",
+        "displayName": "Progress Track",
+        "canonical": "#e4e8f3",
+        "tonalRamp": [
+          "oklch(15.00% 0.01547 269.98)",
+          "oklch(26.43% 0.01547 269.98)",
+          "oklch(37.86% 0.01547 269.98)",
+          "oklch(49.29% 0.01547 269.98)",
+          "oklch(60.71% 0.01547 269.98)",
+          "oklch(72.14% 0.01547 269.98)",
+          "oklch(83.57% 0.01547 269.98)",
+          "oklch(95.00% 0.01547 269.98)"
+        ]
+      },
+      "rail-state-text": {
+        "role": "neutral",
+        "displayName": "Rail State Text",
+        "canonical": "#cbd4f3",
+        "tonalRamp": [
+          "oklch(15.00% 0.04398 272.66)",
+          "oklch(26.43% 0.04398 272.66)",
+          "oklch(37.86% 0.04398 272.66)",
+          "oklch(49.29% 0.04398 272.66)",
+          "oklch(60.71% 0.04398 272.66)",
+          "oklch(72.14% 0.04398 272.66)",
+          "oklch(83.57% 0.04398 272.66)",
+          "oklch(95.00% 0.04398 272.66)"
+        ]
+      },
+      "empty-title": {
+        "role": "neutral",
+        "displayName": "Empty Title",
+        "canonical": "#303b5a",
+        "tonalRamp": [
+          "oklch(15.00% 0.05606 268.57)",
+          "oklch(26.43% 0.05606 268.57)",
+          "oklch(37.86% 0.05606 268.57)",
+          "oklch(49.29% 0.05606 268.57)",
+          "oklch(60.71% 0.05606 268.57)",
+          "oklch(72.14% 0.05606 268.57)",
+          "oklch(83.57% 0.05606 268.57)",
+          "oklch(95.00% 0.05606 268.57)"
+        ]
+      }
+    },
+    "typographyMeta": {
+      "headline": {
+        "displayName": "Headline",
+        "purpose": "Page headings."
+      },
+      "brand": {
+        "displayName": "Brand",
+        "purpose": "Sidebar product name."
+      },
+      "title": {
+        "displayName": "Title",
+        "purpose": "Panel and activity headings."
+      },
+      "body": {
+        "displayName": "Body",
+        "purpose": "Interface copy."
+      },
+      "label": {
+        "displayName": "Label",
+        "purpose": "Action labels."
+      },
+      "diagnostic": {
+        "displayName": "Diagnostic",
+        "purpose": "Read-only event log."
+      },
+      "empty-title": {
+        "displayName": "Empty State Title",
+        "purpose": "Results workbench empty state."
+      },
+      "setup-detail": {
+        "displayName": "Setup Detail",
+        "purpose": "Live setup status and explanation."
+      }
+    },
+    "shadows": [],
+    "motion": [],
+    "breakpoints": [
+      {
+        "name": "setup-column-visible",
+        "value": "1040px"
+      }
+    ]
+  },
+  "components": [
+    {
+      "name": "Primary Button",
+      "kind": "button",
+      "refersTo": "button-primary",
+      "description": "Native push-button styling translated to HTML for this preview.",
+      "html": "<button class=\"ds-primary\">Start session</button>",
+      "css": ".ds-primary{font-family:Segoe UI,sans-serif;font-size:14px;background:#3759dc;color:#ffffff;border:1px solid #3759dc;border-radius:5px;padding:9px 15px;font-weight:600} .ds-primary:hover{background:#2945b5} .ds-primary:active{background:#e1e6f5} .ds-primary:focus-visible{outline:2px solid #3759dc} .ds-primary:disabled{background:#e7eaf1;border-color:#d8deea;color:#6c7589}"
+    },
+    {
+      "name": "Secondary Button",
+      "kind": "button",
+      "refersTo": "button-secondary",
+      "description": "Native push-button styling translated to HTML for this preview.",
+      "html": "<button class=\"ds-secondary\">Refresh connection</button>",
+      "css": ".ds-secondary{font-family:Segoe UI,sans-serif;font-size:14px;background:#ffffff;color:#24293b;border:1px solid #c2c9da;border-radius:5px;padding:9px 15px;font-weight:600} .ds-secondary:hover{background:#eceffa} .ds-secondary:active{background:#e1e6f5} .ds-secondary:focus-visible{outline:2px solid #3759dc} .ds-secondary:disabled{background:#e7eaf1;border-color:#d8deea;color:#6c7589}"
+    },
+    {
+      "name": "Browser Selector",
+      "kind": "input",
+      "refersTo": "tab-selector",
+      "description": "Choose the exact connected browser tab.",
+      "html": "<select class=\"ds-selector\" aria-label=\"Browser tab\"><option>Example page</option><option>Another page</option></select>",
+      "css": ".ds-selector{font-family:Segoe UI,sans-serif;font-size:14px;background:white;color:#24293b;border:1px solid #c2c9da;border-radius:5px;padding:10px;min-height:20px} .ds-selector:focus-visible{outline:2px solid #3759dc}"
+    },
+    {
+      "name": "Sidebar Navigation",
+      "kind": "nav",
+      "refersTo": "navigation",
+      "description": "Three persistent desktop pages.",
+      "html": "<nav class=\"ds-nav\"><button aria-current=\"page\">Workspace</button><button>Connections</button><button>Settings</button></nav>",
+      "css": ".ds-nav{background:#191e2e;width:198px;padding:14px} .ds-nav button{font-family:Segoe UI,sans-serif;font-size:14px;display:block;width:100%;text-align:left;padding:12px 13px;border:0;border-radius:5px;background:transparent;color:#bdc5d9;font-weight:600} .ds-nav button:hover{background:#252c42;color:white} .ds-nav button[aria-current]{background:#313c60;color:white} .ds-nav button:focus-visible{outline:2px solid #3759dc}"
+    },
+    {
+      "name": "Session Status",
+      "kind": "chip",
+      "refersTo": "status",
+      "description": "Literal session state; does not imply answer accuracy.",
+      "html": "<span class=\"ds-status\">Stopped</span>",
+      "css": ".ds-status{font-family:Segoe UI,sans-serif;font-size:14px;display:inline-block;background:#e9edfb;color:#3c4f83;padding:7px 12px;border-radius:4px}"
+    },
+    {
+      "name": "Task Panel",
+      "kind": "card",
+      "refersTo": "panel",
+      "description": "Flat task grouping.",
+      "html": "<section class=\"ds-panel\"><h3>Current session</h3><p>Choose a browser tab to get started.</p></section>",
+      "css": ".ds-panel{font-family:Segoe UI,sans-serif;font-size:14px;background:white;color:#24293b;border:1px solid #dfe3ed;border-radius:8px;padding:20px 22px} .ds-panel h3{font-size:16px;font-weight:600;margin:0 0 12px} .ds-panel p{margin:0;color:#606b82}"
+    },
+    {
+      "name": "Results Workbench",
+      "kind": "custom",
+      "refersTo": "workbench",
+      "description": "Results-first empty state with a browser-tab/checkmark illustration and collapsed activity log.",
+      "html": "<section class=\"ds-workbench\"><h3>Results</h3><div class=\"ds-empty\"><svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 96 72\"><rect x=\"6\" y=\"7\" width=\"65\" height=\"47\" rx=\"7\" fill=\"#e9edfb\" stroke=\"#b6c3f2\" stroke-width=\"2\"/><rect x=\"24\" y=\"20\" width=\"65\" height=\"47\" rx=\"7\" fill=\"#fff\" stroke=\"#3759dc\" stroke-width=\"2\"/><path d=\"M24 32h65\" stroke=\"#3759dc\" stroke-width=\"2\"/><path d=\"m45 49 7 7 15-15\" fill=\"none\" stroke=\"#3759dc\" stroke-width=\"3\" stroke-linecap=\"round\" stroke-linejoin=\"round\"/></svg><h4>A clear view of every answer</h4><p>Choose your source tab above. Questions and selected answers will appear here as the session runs.</p></div><details class=\"ds-log\"><summary>Show activity log</summary><pre>Session activity appears here.</pre></details></section>",
+      "css": ".ds-workbench{background:white;color:#24293b;border:1px solid #dfe3ed;border-radius:9px;padding:22px 22px 18px;font:14px Segoe UI,sans-serif}.ds-workbench h3{font-size:16px;margin:0;font-weight:600}.ds-empty{text-align:center;padding:28px 20px}.ds-empty svg{width:80px;height:64px}.ds-empty h4{font-size:21px;font-weight:600;color:#303b5a;margin:14px 0}.ds-empty p{color:#606b82}.ds-log summary{padding:6px 0;color:#3c4f83;cursor:pointer}.ds-log summary:hover{color:#2945b5}.ds-log summary:focus-visible{outline:1px solid #3759dc}.ds-log pre{font:12px Cascadia Mono,Consolas,monospace;border:1px solid #dfe3ed;border-radius:5px;padding:10px;height:90px}"
+    }
+  ],
+  "narrative": {
+    "northStar": "Windows Operate",
+    "overview": "The Windows Operate utility is a calm, practical workspace. A light working surface and dark persistent sidebar separate tasks from navigation. Cobalt marks primary actions and observed status; typography and spacing carry the hierarchy.\n\nThe application retains the standard Windows titlebar and uses native PyQt6 controls with the Fusion widget style. This document captures the implemented desktop, with dashboard_window.py as the source authority; browser HUD styling is a separate surface.",
+    "keyCharacteristics": [
+      "Light workbench with a persistent ink rail and cobalt actions.",
+      "Results-first workbench, live setup guidance, and an expandable activity log.",
+      "Flat panels, cobalt actions, and standard Windows framing."
+    ],
+    "rules": [],
+    "dos": [
+      "Do retain the ink-and-cobalt workbench, dark persistent sidebar, and standard OS titlebar.",
+      "Do use Segoe UI for interface text and monospace only for diagnostic activity.",
+      "Do retain visible keyboard focus and readable disabled states.",
+      "Do describe connection and session states using observed facts."
+    ],
+    "donts": [
+      "Don't add decorative shadows or motion to this flat utility without a new design decision.",
+      "Don't replace native window controls with a custom titlebar.",
+      "Don't imply that a detected provider tab proves sign-in or answer accuracy."
+    ]
+  }
+}

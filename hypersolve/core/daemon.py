@@ -1,7 +1,7 @@
 import os
 import re
 import asyncio
-import random
+import logging
 import sys
 from urllib.parse import urlparse, parse_qs, urlencode, urlunparse
 from typing import Dict, List, Optional, Set, Callable
@@ -18,6 +18,7 @@ if sys.platform == "win32":
 from hypersolve.core.browser import BrowserManager
 from hypersolve.parser.a11y_engine import UniversalA11yParser, QuizQuestion, QuizOption
 from hypersolve.hud.injector import HUDInjector
+from hypersolve.hud.controls import OverlayControls
 from hypersolve.stealth.ghost_shield import GhostShield
 from hypersolve.injector.synthetic_events import SyntheticInjector
 from hypersolve.router.heartbeat import HeartbeatDaemon
@@ -39,6 +40,9 @@ class HyperSolveDaemon:
         on_status_change: Optional[Callable[[str], None]] = None,
         on_target_attached: Optional[Callable[[str], None]] = None,
         on_solved: Optional[Callable[[int, int, str], None]] = None,
+        target_url: Optional[str] = None,
+        target_id: Optional[str] = None,
+        on_event: Optional[Callable[[str, object], None]] = None,
     ):
         self.browser_manager = BrowserManager(cdp_url)
         self.heartbeat: Optional[HeartbeatDaemon] = None
@@ -48,42 +52,80 @@ class HyperSolveDaemon:
         self.on_status_change = on_status_change
         self.on_target_attached = on_target_attached
         self.on_solved = on_solved
-        self.target_accuracy: float = 1.0
+        self.target_url = target_url
+        self.target_id = target_id
+        self.on_event = on_event
+        self.overlay_controls = OverlayControls(self._emit)
+
+    def _emit(self, kind, payload):
+        if kind == "error":
+            self.overlay_controls.last_error = payload
+        if self.on_event:
+            self.on_event(kind, payload)
+        if kind == "status" and self.on_status_change:
+            self.on_status_change(payload)
 
     async def start(self):
-        """Starts the daemon in a perpetual supervisor loop."""
-        print("\n" + "=" * 65)
-        print("  ⚡ HYPERSOLVE — UNIVERSAL AUTONOMOUS ASSESSMENT ENGINE ⚡")
-        print("  [SHIELD] Ghost Shield Anti-Proctoring Armor: ARMED")
-        print("  [HUD] Closed Shadow-DOM Overlay: ACTIVE (Panic: Ctrl+Shift+X)")
-        print("  [ROUTER] Background Neural Router & Heartbeat: ONLINE")
-        print("=" * 65 + "\n")
-
-        while True:
+        """Supervise the selected tab; cancellation always releases resources."""
+        self.overlay_controls.owner = asyncio.current_task()
+        try:
+            while True:
+                try:
+                    self._emit("status", "Connecting to Chrome…")
+                    browser = await self.browser_manager.connect()
+                    self.heartbeat = HeartbeatDaemon(browser)
+                    await self.heartbeat.start()
+                    self.brain_router = BrainRouter(browser)
+                    break
+                except Exception as exc:
+                    self._emit("status", "Browser unavailable. Retrying in 3 seconds.")
+                    logging.warning("Browser connection failed: %s", exc)
+                    await asyncio.sleep(3)
+            while True:
+                try:
+                    await self._supervisory_cycle()
+                    if self.target_url:
+                        return
+                except Exception:
+                    logging.exception("Session cycle failed")
+                    self._emit("error", "Session failed. Stop and check the page and AI connection before retrying.")
+                    if self.target_url:
+                        return
+                    await asyncio.sleep(3)
+        finally:
+            async def cleanup():
+                try:
+                    await self.overlay_controls.finish()
+                finally:
+                    try:
+                        if self.heartbeat:
+                            await self.heartbeat.stop()
+                    finally:
+                        await self.browser_manager.disconnect()
+            cleanup_task = asyncio.create_task(cleanup())
             try:
-                browser = await self.browser_manager.connect()
-                self.heartbeat = HeartbeatDaemon(browser)
-                await self.heartbeat.start()
-                self.brain_router = BrainRouter(browser)
-                break
-            except Exception as e:
-                await asyncio.sleep(2.5)
-
-        while True:
-            try:
-                await self._supervisory_cycle()
-            except Exception as e:
-                print(f"[DAEMON NOTICE] Cycle refreshed: {e}. Resuming in 3s...")
-                await asyncio.sleep(3)
+                await asyncio.shield(cleanup_task)
+            except asyncio.CancelledError:
+                await cleanup_task
+                raise
 
     async def _supervisory_cycle(self):
         if not self._monitoring_announced:
+            self._emit("status", "Watching Chrome for supported questions…")
             print(">>> [MONITORING] Standing by for active assessments...")
             self._monitoring_announced = True
 
         while True:
-            tabs = await self.browser_manager.scan_tabs()
-            quiz_tabs = tabs["quiz"]
+            await self.overlay_controls.checkpoint()
+            if self.target_url:
+                target = await self.browser_manager.find_target_page(self.target_url, self.target_id)
+                quiz_tabs = [target] if target else []
+                if not quiz_tabs:
+                    self._emit("error", "The selected tab moved or closed. Choose the tab again.")
+                    return
+            else:
+                tabs = await self.browser_manager.scan_tabs()
+                quiz_tabs = tabs["quiz"]
             # Filter for uncompleted quizzes only
             active_quizzes = [
                 p for p in quiz_tabs
@@ -103,30 +145,27 @@ class HyperSolveDaemon:
         has_api_key = bool(os.getenv("GEMINI_API_KEY") or os.getenv("OPENAI_API_KEY"))
 
         if not has_ai and not has_api_key:
+            self._emit("error", "No AI provider available. Open and sign in to ChatGPT, Gemini, or Claude.")
             print("\n" + "=" * 65)
             print("  ⚠️  [ATTENTION] No AI provider tab (ChatGPT / Gemini) detected!")
             print("  Please make sure you are LOGGED IN to at least one:")
             print("    - ChatGPT: https://chatgpt.com (Sign in and keep tab open)")
             print("    - Google Gemini: https://gemini.google.com")
             print("=" * 65 + "\n")
-            try:
-                if self.browser_manager.browser and self.browser_manager.browser.contexts:
-                    new_tab = await self.browser_manager.browser.contexts[0].new_page()
-                    await new_tab.goto("https://chatgpt.com")
-                    print("  [AUTO-OPEN] Opened https://chatgpt.com in a new tab. Please sign in!")
-            except Exception:
-                pass
-            await asyncio.sleep(4)
+            await asyncio.sleep(3)
             return
 
         # Process each detected quiz tab
         for quiz_page in quiz_tabs:
+            await self.overlay_controls.checkpoint()
             if quiz_page.is_closed():
                 continue
             attempt_id = self._get_attempt_id(quiz_page.url)
             if attempt_id and attempt_id in self.completed_attempts:
                 continue
             await self._solve_quiz_tab(quiz_page)
+            if self.target_url:
+                return
 
         print("[STANDBY] Assessment cycle complete. Standing by for next quiz...\n")
         self._monitoring_announced = False
@@ -134,72 +173,20 @@ class HyperSolveDaemon:
     def _get_attempt_id(self, url: str) -> Optional[str]:
         m = re.search(r'attempt=(\d+)', url)
         if m:
-            return m.group(1)
-        clean = url.split('#')[0].split('?')[0]
-        return clean
+            return url.split("?")[0] + "?attempt=" + m.group(1)
+        parsed = urlparse(url)
+        query = parse_qs(parsed.query, keep_blank_values=True)
+        query.pop("page", None)
+        fragment = parsed.fragment if parsed.fragment.startswith(("/", "!")) else ""
+        return urlunparse(parsed._replace(query=urlencode(sorted(query.items()), doseq=True), fragment=fragment))
 
     def _match_option(self, target_answer: str, options: List[QuizOption]) -> Optional[QuizOption]:
-        """Robust multi-tier option matching for AI responses."""
-        if not target_answer or not options:
-            return None
-
-        clean_target = target_answer.strip()
-        clean_target_lower = clean_target.lower()
-
-        # 1. Exact match
-        for opt in options:
-            if clean_target_lower == opt.text.strip().lower():
-                return opt
-
-        # 2. Choice letter alone: 'A', 'B', '(C)', 'Option D'
-        letter_match = re.match(r'^(?:option\s+)?(?:\(?([a-d])\)?|\b([a-d])\b)[.:]?$', clean_target_lower)
-        if letter_match:
-            letter = letter_match.group(1) or letter_match.group(2)
-            idx = ord(letter) - ord('a')
-            if 0 <= idx < len(options):
-                return options[idx]
-
-        # 3. Choice letter prefix: 'A. Some text' or '(B) Some text'
-        prefix_match = re.match(r'^(?:option\s+)?(?:\(?([a-d])\)?|\b([a-d])\b)[.:\-\s]+(.*)$', clean_target_lower)
-        if prefix_match:
-            letter = prefix_match.group(1) or prefix_match.group(2)
-            idx = ord(letter) - ord('a')
-            rest_text = prefix_match.group(3).strip()
-            if 0 <= idx < len(options):
-                if not rest_text or rest_text in options[idx].text.lower() or options[idx].text.lower() in rest_text:
-                    return options[idx]
-
-        # 4. Longest substantial substring match (length >= 3)
-        best_opt = None
-        best_len = 0
-        for opt in options:
-            opt_t = opt.text.strip().lower()
-            if len(clean_target_lower) >= 3 and len(opt_t) >= 3:
-                if clean_target_lower in opt_t or opt_t in clean_target_lower:
-                    match_len = min(len(clean_target_lower), len(opt_t))
-                    if match_len > best_len:
-                        best_len = match_len
-                        best_opt = opt
-        if best_opt:
-            return best_opt
-
-        # 5. Word token overlap (Jaccard similarity)
-        target_words = set(re.findall(r'\w+', clean_target_lower))
-        if target_words:
-            best_score = 0
-            best_token_opt = None
-            for opt in options:
-                opt_words = set(re.findall(r'\w+', opt.text.strip().lower()))
-                overlap = len(target_words & opt_words)
-                if overlap > best_score:
-                    best_score = overlap
-                    best_token_opt = opt
-            if best_token_opt and best_score >= 1:
-                return best_token_opt
-
-        return None
+        from hypersolve.companion.answers import match_choice
+        index = match_choice(target_answer, [option.text for option in options])
+        return options[index] if index is not None else None
 
     async def _solve_quiz_tab(self, page: Page):
+        await self.overlay_controls.checkpoint()
         attempt_id = self._get_attempt_id(page.url)
         if attempt_id and attempt_id in self.completed_attempts:
             await asyncio.sleep(2)
@@ -209,15 +196,18 @@ class HyperSolveDaemon:
         initial_questions = await UniversalA11yParser.parse_page(page)
         if not initial_questions:
             if "attempt.php" not in page.url:
+                self._emit("error", "No supported questions found. Open the question page and try again.")
                 await asyncio.sleep(2)
                 return
             await asyncio.sleep(1)
             initial_questions = await UniversalA11yParser.parse_page(page)
             if not initial_questions:
+                self._emit("error", "No supported questions found on this page. Wait for the page to load, then retry.")
                 print("[WAIT] No quiz questions found on this page yet (waiting for attempt to load)...")
                 await asyncio.sleep(2)
                 return
 
+        self._emit("status", "Reading questions from the selected tab…")
         print(f"\n[TARGET ATTACHED] {page.url[:75]}...")
         if self.on_target_attached:
             try:
@@ -225,7 +215,7 @@ class HyperSolveDaemon:
             except Exception:
                 pass
         await GhostShield.arm(page)
-        await HUDInjector.inject(page)
+        await self.overlay_controls.attach(page)
         await HUDInjector.update_stats(page, 0, 0, status="STARTING SURVEY")
 
         # -------------------------------------------------------------
@@ -240,6 +230,7 @@ class HyperSolveDaemon:
             first_url = urlunparse((u.scheme, u.netloc, new_path, u.params, urlencode(q_params, doseq=True), u.fragment))
             print("[SURVEY] Rewinding to Page 1 to harvest all questions...")
             try:
+                await self.overlay_controls.checkpoint()
                 await page.goto(first_url)
                 await page.wait_for_load_state("domcontentloaded")
                 await asyncio.sleep(0.5)
@@ -254,17 +245,21 @@ class HyperSolveDaemon:
         max_pages = 50
 
         while page_num <= max_pages:
+            await self.overlay_controls.checkpoint()
             await GhostShield.arm(page)
             print(f"  [HARVEST] Scraping Page {page_num}...")
             await HUDInjector.update_stats(page, len(harvested_questions), 0, status=f"HARVEST P.{page_num}")
 
             questions_on_page = await UniversalA11yParser.parse_page(page)
             for q in questions_on_page:
+                await self.overlay_controls.checkpoint()
+                await HUDInjector.start_scan(page, q.dom_id or "")
                 # Add unique questions by clean text
                 if not any(hq.text.strip().lower() == q.text.strip().lower() for hq in harvested_questions):
                     q.id = len(harvested_questions) + 1
                     harvested_questions.append(q)
                     print(f"    + Q{q.id}: {q.text[:65]}... ({len(q.options)} choices)")
+                    await HUDInjector.update_stats(page, len(harvested_questions), 0, status=f"HARVEST P.{page_num}")
 
             # Check if this is the final page (Finish attempt button)
             finish_btn = page.locator('input[value*="Finish attempt"], button:has-text("Finish attempt")').first
@@ -275,6 +270,7 @@ class HyperSolveDaemon:
             # Look for Next button
             next_btn = page.locator('input.mod_quiz-next-nav:not([value*="Finish"]), input[value*="Next"]:not([value*="Finish"]), button:has-text("Next Question"), button:has-text("Next page"), button:has-text("Next")').first
             if await next_btn.count() > 0 and await next_btn.is_visible():
+                await self.overlay_controls.checkpoint()
                 try:
                     async with page.expect_navigation(wait_until="domcontentloaded", timeout=10000):
                         await next_btn.click()
@@ -287,10 +283,13 @@ class HyperSolveDaemon:
                 break
 
         if not harvested_questions:
+            self._emit("error", "No questions could be read from this page.")
             print("[WARN] No quiz questions found during survey.")
             await asyncio.sleep(2)
             return
 
+        self._emit("questions", [{"id": q.id, "text": q.text} for q in harvested_questions])
+        self._emit("status", "Waiting for the AI response…")
         print(f"\n[SURVEY COMPLETE] Successfully harvested {len(harvested_questions)} questions across {page_num} page(s)!")
 
         # -------------------------------------------------------------
@@ -301,13 +300,17 @@ class HyperSolveDaemon:
         print("=======================================================")
         await HUDInjector.update_stats(page, 0, len(harvested_questions), status="ROUTING TO AI")
 
+        await self.overlay_controls.checkpoint()
         answers, brain_used = await self.brain_router.solve_batch(harvested_questions)
+        await self.overlay_controls.checkpoint()
         if not answers:
+            self._emit("error", "AI returned no usable answers. Check sign-in, usage limits, and the provider tab, then retry.")
             print(f"[ERROR] AI session returned no valid answers ({brain_used}).")
             await HUDInjector.update_stats(page, 0, len(harvested_questions), status="AI FAILED", brain=brain_used)
             await asyncio.sleep(3)
             return
 
+        await HUDInjector.update_stats(page, 0, len(harvested_questions), status="SELECTING", brain=brain_used)
         print(f"[AI SUCCESS] Received answers from {brain_used} ({len(answers)} solutions)!")
 
         # -------------------------------------------------------------
@@ -326,6 +329,7 @@ class HyperSolveDaemon:
             first_url = urlunparse((u.scheme, u.netloc, new_path, u.params, urlencode(q_params, doseq=True), u.fragment))
             print("  [NAVIGATION] Returning to Page 1 to inject verified answers...")
             try:
+                await self.overlay_controls.checkpoint()
                 await page.goto(first_url)
                 await page.wait_for_load_state("domcontentloaded")
                 await asyncio.sleep(0.5)
@@ -337,12 +341,15 @@ class HyperSolveDaemon:
         total_verified = 0
 
         while inject_page <= max_pages:
+            await self.overlay_controls.checkpoint()
             await GhostShield.arm(page)
-            await HUDInjector.inject(page)
+            await HUDInjector.update_stats(page, total_injected + total_verified, len(harvested_questions), status=f"SELECTING P.{inject_page}", brain=brain_used)
             print(f"  [INJECT] Processing Page {inject_page}...")
 
             questions_on_page = await UniversalA11yParser.parse_page(page)
             for q in questions_on_page:
+                await self.overlay_controls.checkpoint()
+                await HUDInjector.start_scan(page, q.dom_id or "")
                 matching_hq = None
                 for hq in harvested_questions:
                     if hq.text.strip().lower() == q.text.strip().lower():
@@ -358,23 +365,26 @@ class HyperSolveDaemon:
                     continue
 
                 matched_opt = self._match_option(target_answer, q.options)
-                if not matched_opt and q.options:
-                    matched_opt = q.options[0]
 
                 if not matched_opt:
                     continue
 
+                await self.overlay_controls.checkpoint()
                 # Verification: Is the target option ALREADY selected in DOM?
                 already_correct = any(opt.is_checked and opt.index == matched_opt.index for opt in q.options)
                 if already_correct:
                     print(f"    [VERIFIED ✓] Q{matching_hq.id}: Option {matched_opt.index + 1} already correct ('{matched_opt.text[:35]}'). Skipping.")
                     total_verified += 1
                 else:
-                    await SyntheticInjector.select_option(page, matched_opt.ref_id, matched_opt.index)
+                    selected = await SyntheticInjector.select_option(page, matched_opt.ref_id, matched_opt.index)
+                    if not selected:
+                        self._emit("status", f"Could not select question {matching_hq.id}; skipped.")
+                        continue
                     total_injected += 1
-                    confidence = round(random.uniform(98.1, 99.8), 1)
-                    await HUDInjector.lock_answer(page, q.dom_id or "", matched_opt.ref_id, confidence, brain_used)
-                    print(f"    [LOCKED ⚡] Q{matching_hq.id} -> Option {matched_opt.index + 1}: {matched_opt.text[:35]} ({confidence}%)")
+
+                await HUDInjector.lock_answer(page, q.dom_id or "", matched_opt.ref_id, None, brain_used, matching_hq.id, matched_opt.text)
+                self._emit("answer", {"id": matching_hq.id, "answer": matched_opt.text,
+                                       "done": total_injected + total_verified, "total": len(harvested_questions)})
 
                 await HUDInjector.update_stats(
                     page, total_injected + total_verified, len(harvested_questions),
@@ -390,7 +400,7 @@ class HyperSolveDaemon:
                 print(f"  Advancing to Summary & Review Screen...")
                 print(f"=======================================================\n")
                 await HUDInjector.update_stats(
-                    page, len(harvested_questions), len(harvested_questions),
+                    page, total_injected + total_verified, len(harvested_questions),
                     status="ALL COMPLETE", brain=brain_used
                 )
                 if self.on_solved:
@@ -398,6 +408,7 @@ class HyperSolveDaemon:
                         self.on_solved(total_injected + total_verified, len(harvested_questions), brain_used)
                     except Exception:
                         pass
+                await self.overlay_controls.checkpoint()
                 try:
                     async with page.expect_navigation(wait_until="domcontentloaded", timeout=10000):
                         await finish_btn.click()
@@ -409,6 +420,7 @@ class HyperSolveDaemon:
             # Advance to next page to continue injecting
             next_btn = page.locator('input.mod_quiz-next-nav:not([value*="Finish"]), input[value*="Next"]:not([value*="Finish"]), button:has-text("Next Question"), button:has-text("Next page"), button:has-text("Next")').first
             if await next_btn.count() > 0 and await next_btn.is_visible():
+                await self.overlay_controls.checkpoint()
                 try:
                     async with page.expect_navigation(wait_until="domcontentloaded", timeout=10000):
                         await next_btn.click()
@@ -420,6 +432,9 @@ class HyperSolveDaemon:
             else:
                 break
 
+        await HUDInjector.update_stats(page, total_injected + total_verified, len(harvested_questions), status="ALL COMPLETE", brain=brain_used)
+        self._emit("complete", {"done": total_injected + total_verified,
+                                "total": len(harvested_questions), "brain": brain_used})
         # Register completed attempt to prevent any repeated loops
         if attempt_id:
             self.completed_attempts.add(attempt_id)

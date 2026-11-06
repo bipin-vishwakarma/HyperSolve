@@ -1,4 +1,4 @@
-"""HyperSolve Desktop: Native Windows Transparent Frosted-Glass HUD, System Tray, and Command Center."""
+"""HyperSolve desktop workspace, tray entry point, and legacy screenshot HUD."""
 
 __all__ = [
     "DesktopOverlayWindow",
@@ -16,9 +16,12 @@ def __getattr__(name):
     if name == "GlobalHotkeyListener":
         from .hotkeys import GlobalHotkeyListener
         return GlobalHotkeyListener
-    if name in ("HyperSolveTrayApp", "run_tray"):
-        from .tray import HyperSolveTrayApp, run_tray
-        return HyperSolveTrayApp if name == "HyperSolveTrayApp" else run_tray
+    if name == "HyperSolveTrayApp":
+        from .dashboard_window import HyperSolveDashboard
+        return HyperSolveDashboard
+    if name == "run_tray":
+        from .tray import run_tray
+        return run_tray
     if name in ("HyperSolveDashboard", "run_dashboard"):
         from .dashboard_window import HyperSolveDashboard, run_dashboard
         return HyperSolveDashboard if name == "HyperSolveDashboard" else run_dashboard

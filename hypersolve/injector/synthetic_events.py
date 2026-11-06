@@ -25,8 +25,14 @@ class SyntheticInjector:
             for loc in locators:
                 if await loc.count() > 0 and await loc.is_visible():
                     await loc.scroll_into_view_if_needed()
-                    await loc.click(force=True)
-                    break
+                    covered = await loc.evaluate("""el => {
+                        const rect = el.getBoundingClientRect();
+                        const hit = document.elementFromPoint(rect.left + rect.width / 2, rect.top + rect.height / 2);
+                        return hit?.id === '__hypersolve_host__';
+                    }""")
+                    if not covered:
+                        await loc.click(timeout=1500)
+                        break
         except Exception:
             pass
 

@@ -85,11 +85,13 @@ def main():
     brain_timer.timeout.connect(check_brain_periodically)
     brain_timer.start(6000)
 
-    def do_solve_async():
+    solve_lock = threading.Lock()
+
+    def do_solve_async(img):
         bridge.status_updated.emit("Capturing Screen...", "analyzing")
         try:
             # 1. Capture screen
-            img = ScreenCapturer.capture_primary_screen()
+            # Screen was captured on the Qt GUI thread before starting this worker.
             
             brain_name, _ = detect_active_brain()
             bridge.status_updated.emit(f"Solving via {brain_name}...", "analyzing")
@@ -97,7 +99,7 @@ def main():
             # 2. Query VLM Solver (Supports both zero-key Chrome session & optional API key)
             res = vlm.solve_screen(img)
             if res:
-                bridge.status_updated.emit(f"Answer: {res.selected_answer[:22]} ({res.confidence}%)", "solved")
+                bridge.status_updated.emit(f"Answer: {res.selected_answer[:22]}", "solved")
                 # 3. Move mouse and click
                 MousePilot.click_normalized(res.x_percent, res.y_percent, humanized=True)
             else:
@@ -105,9 +107,24 @@ def main():
         except Exception as e:
             print(f"[SOLVER ERROR] {e}")
             bridge.status_updated.emit("Solve failed", "error")
+        finally:
+            solve_lock.release()
+
+    def capture_and_solve():
+        if not solve_lock.acquire(blocking=False):
+            return
+        try:
+            img = ScreenCapturer.capture_primary_screen()
+        except Exception:
+            solve_lock.release()
+            bridge.status_updated.emit("Screen capture failed", "error")
+            return
+        threading.Thread(target=do_solve_async, args=(img,), daemon=True).start()
+
+    bridge.solve_requested.connect(capture_and_solve)
 
     def on_solve_hotkey():
-        threading.Thread(target=do_solve_async, daemon=True).start()
+        bridge.solve_requested.emit()
 
     def on_vanish_hotkey():
         bridge.vanish_requested.emit()
