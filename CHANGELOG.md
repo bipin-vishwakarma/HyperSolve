@@ -1,3 +1,11 @@
+# 2.2.0 — Saved workspaces and automation
+
+- Save and restore local web-tab snapshots while retaining the Chrome profile.
+- Add manually started automatic quiz detection alongside selected-tab sessions.
+- Detect supported question structures instead of relying only on URL keywords.
+- Keep watching after a completed quiz; stop on terminal provider errors.
+- Preserve quiz query/hash identities and show restore failures per tab.
+
 # 2.1.0 — Windows desktop refresh
 
 - Replace the decorative command centre with Workspace, Connections, and Settings.

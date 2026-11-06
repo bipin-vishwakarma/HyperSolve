@@ -10,13 +10,20 @@ The app opens to a light workspace with a dark navigation rail. The workspace us
 2. Sign in to ChatGPT, Gemini, or Claude in that browser. An open provider tab is detected; detection alone does not verify sign-in.
 3. Open the page you want to work with in the same browser.
 4. In **Workspace**, choose the tab and select **Start session**. The session reads questions, sends them to an available AI provider, selects matching answers, and navigates pages. Review the outcome in Chrome.
-5. Use **Stop** to cancel. Closing the app stops the session and leaves Chrome open. Keeping it in the tray is an optional setting.
+5. For continuing automation, choose **Automatic quiz detection** and click **Start automation**. It watches open tabs for supported quiz structures, processes new quizzes, and keeps watching until you stop it. It does not start automatically on app launch. If a page is not detected, use **Selected tab** mode.
+6. Use **Stop** to cancel. Closing the app stops the session and leaves Chrome open. Keeping it in the tray is an optional setting.
 
 The parser contains adapters for several question formats plus DOM heuristics. Compatibility and answer correctness vary with the page and provider. No accuracy percentage is fabricated, and no claim of universal compatibility or undetectability is made.
 
+## Saved workspace
+
+In **Connections → Saved workspace**, choose **Save workspace** to snapshot open HTTP/HTTPS tabs and the selected source locally in `%LOCALAPPDATA%\HyperSolve\workspace.json`. This replaces the previous snapshot atomically. Cookies and passwords are not copied; sign-ins remain in Chrome's dedicated profile.
+
+**Restore workspace** opens missing tabs and keeps existing tabs. It does not start automation. Page history, unsaved form entries, tab groups, and window positions are not part of this snapshot. Redirected tabs are reconciled while the browser session remains open. A tab that cannot load is reported without preventing the rest from reopening. Quitting stops the remaining restore queue; an active navigation can take up to 10 seconds to finish or time out.
+
 ## Install
 
-Use `HyperSolve-Setup-v2.1.0.exe` from a built release or `dist_installer/`. Python and application dependencies are bundled. Install is per-user and does not require administrator access. Start Menu shortcuts and uninstall support are included; Desktop and Windows-login shortcuts are optional.
+Use `HyperSolve-Setup-v2.2.0.exe` from a built release or `dist_installer/`. Python and application dependencies are bundled. Install is per-user and does not require administrator access. Start Menu shortcuts and uninstall support are included; Desktop and Windows-login shortcuts are optional.
 
 New browser profiles and logs live under `%LOCALAPPDATA%\HyperSolve`. A source checkout reuses its existing `chrome_profile` when present. Updates and uninstall preserve browser data. No profile, cookies, credentials, or local logs belong in a release artifact.
 

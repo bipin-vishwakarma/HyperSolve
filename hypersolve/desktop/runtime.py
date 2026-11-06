@@ -38,7 +38,7 @@ def inspect_connection(cdp_url=CDP_URL):
         providers = sorted({provider_for_url(t.get("url", "")) for t in tabs} - {None})
         targets = [t for t in tabs if urlparse(t.get("url", "")).scheme in ("http", "https")
                    and not provider_for_url(t.get("url", ""))]
-        return {"connected": True, "providers": providers, "targets": targets, "error": ""}
+        return {"connected": True, "providers": providers, "targets": targets, "tabs": tabs, "error": ""}
     except (requests.RequestException, ValueError, TypeError, AttributeError) as exc:
         return {"connected": False, "providers": [], "targets": [], "error": str(exc)}
 
@@ -57,7 +57,7 @@ def find_chrome():
     return next((p for p in candidates if p.is_file()), None)
 
 
-def launch_chrome(url="https://chatgpt.com"):
+def launch_chrome(url="https://chatgpt.com", *, urls=None):
     chrome = find_chrome()
     if not chrome:
         raise FileNotFoundError("Google Chrome was not found. Install Chrome, then try again.")
@@ -66,4 +66,4 @@ def launch_chrome(url="https://chatgpt.com"):
     profile = legacy_profile if (legacy_profile / "Local State").is_file() else PROFILE_DIR
     return subprocess.Popen([str(chrome), "--remote-debugging-port=9222",
                              "--remote-debugging-address=127.0.0.1",
-                             f"--user-data-dir={profile}", "--no-first-run", url])
+                             f"--user-data-dir={profile}", "--no-first-run", *(urls if urls is not None else [url])])

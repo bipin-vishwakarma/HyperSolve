@@ -94,6 +94,7 @@ class HyperSolveDaemon:
 
     async def _supervisory_cycle(self):
         if not self._monitoring_announced:
+            self._emit("status", "Watching Chrome for supported questions…")
             print(">>> [MONITORING] Standing by for active assessments...")
             self._monitoring_announced = True
 
@@ -133,14 +134,7 @@ class HyperSolveDaemon:
             print("    - ChatGPT: https://chatgpt.com (Sign in and keep tab open)")
             print("    - Google Gemini: https://gemini.google.com")
             print("=" * 65 + "\n")
-            try:
-                if self.browser_manager.browser and self.browser_manager.browser.contexts:
-                    new_tab = await self.browser_manager.browser.contexts[0].new_page()
-                    await new_tab.goto("https://chatgpt.com")
-                    print("  [AUTO-OPEN] Opened https://chatgpt.com in a new tab. Please sign in!")
-            except Exception:
-                pass
-            await asyncio.sleep(4)
+            await asyncio.sleep(3)
             return
 
         # Process each detected quiz tab
@@ -160,9 +154,12 @@ class HyperSolveDaemon:
     def _get_attempt_id(self, url: str) -> Optional[str]:
         m = re.search(r'attempt=(\d+)', url)
         if m:
-            return m.group(1)
-        clean = url.split('#')[0].split('?')[0]
-        return clean
+            return url.split("?")[0] + "?attempt=" + m.group(1)
+        parsed = urlparse(url)
+        query = parse_qs(parsed.query, keep_blank_values=True)
+        query.pop("page", None)
+        fragment = parsed.fragment if parsed.fragment.startswith(("/", "!")) else ""
+        return urlunparse(parsed._replace(query=urlencode(sorted(query.items()), doseq=True), fragment=fragment))
 
     def _match_option(self, target_answer: str, options: List[QuizOption]) -> Optional[QuizOption]:
         """Robust multi-tier option matching for AI responses."""

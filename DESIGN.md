@@ -154,6 +154,8 @@ Panels have gently rounded corners; controls use a slightly tighter curve. Statu
 
 ## Components
 
+Session controls include a mode selector for selected-tab runs and explicitly started automatic detection. Connections includes a Saved workspace panel with Save/Restore actions, progress, and local snapshot status. Use existing combo-box and button styles; no new colour or typography tokens.
+
 ### Buttons
 
 Primary buttons use cobalt with white text and a darker hover. Secondary buttons use white, a cool border, a pale hover, and a slightly darker pressed state. Disabled buttons use the shared disabled palette. All use the control radius and semibold labels. Keyboard focus is outlined in cobalt; the current stylesheet changes states immediately.

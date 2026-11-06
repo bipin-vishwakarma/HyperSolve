@@ -19,6 +19,7 @@ from PyQt6.QtWidgets import (
 from hypersolve.__version__ import __version__
 from hypersolve.core.daemon import HyperSolveDaemon
 from hypersolve.updater.engine import OTAUpdateManager
+from .workspaces import load_workspace, save_workspace, restore_workspace
 from .runtime import (
     APP_ID, RESOURCE_DIR, DATA_DIR, LOG_DIR, CDP_URL,
     configure_logging, inspect_connection, launch_chrome,
@@ -122,10 +123,12 @@ class EngineWorker(QThread):
     event = pyqtSignal(str, object)
     failed = pyqtSignal(str)
 
-    def __init__(self, target_url, parent=None, *, target_id=None):
+    def __init__(self, target_url, parent=None, *, target_id=None, auto_detect=False, cdp_url=CDP_URL):
         super().__init__(parent)
         self.target_url = target_url
         self.target_id = target_id
+        self.auto_detect = auto_detect
+        self.cdp_url = cdp_url
         self._loop = None
         self._task = None
         self._stop_requested = threading.Event()
@@ -139,7 +142,7 @@ class EngineWorker(QThread):
             with self._lock:
                 self._loop = self._task = None
             return
-        daemon = HyperSolveDaemon(target_url=self.target_url, target_id=self.target_id, on_event=self.event.emit)
+        daemon = HyperSolveDaemon(cdp_url=self.cdp_url, target_url=None if self.auto_detect else self.target_url, target_id=self.target_id, on_event=self.event.emit)
         try:
             await daemon.start()
         except asyncio.CancelledError:
@@ -170,6 +173,10 @@ class HyperSolveDashboard(QWidget):
         self.engine = None
         self.jobs = []
         self.scanning = False
+        self.workspace_busy = False
+        self.workspace_cancel = threading.Event()
+        self.has_saved_workspace = False
+        self._pending_selection = None
         self.connection = {"connected": False, "providers": [], "targets": []}
         self.latest_update = None
         self.question_rows = {}
@@ -250,11 +257,18 @@ class HyperSolveDashboard(QWidget):
         work.setContentsMargins(22, 22, 22, 18)
         work.setSpacing(14)
         top = QHBoxLayout()
-        top.addWidget(label("Source tab", "Section"))
+        top.addWidget(label("Session controls", "Section"))
         top.addStretch()
         self.state_label = label("Stopped", "Status")
         top.addWidget(self.state_label)
         work.addLayout(top)
+        self.automation_mode = QComboBox()
+        self.automation_mode.setAccessibleName("Automation mode")
+        self.automation_mode.addItem("Selected tab — run once", "selected")
+        self.automation_mode.addItem("Automatic quiz detection — watch open tabs", "automatic")
+        self.automation_mode.setCurrentIndex(max(0, self.automation_mode.findData(self.settings.value("automation_mode", "selected"))))
+        self.automation_mode.currentIndexChanged.connect(self._mode_changed)
+        work.addWidget(self.automation_mode)
         self.targets = QComboBox()
         self.targets.setAccessibleName("Browser tab to process")
         self.targets.setSizeAdjustPolicy(QComboBox.SizeAdjustPolicy.AdjustToMinimumContentsLengthWithIcon)
@@ -377,6 +391,8 @@ class HyperSolveDashboard(QWidget):
             self.open_browser()
         elif not (self.connection["providers"] or os.getenv("GEMINI_API_KEY") or os.getenv("OPENAI_API_KEY")):
             self.switch_page(1)
+        elif self.automation_mode.currentData() == "automatic":
+            self.start_session()
         else:
             self.targets.setFocus()
             self.targets.showPopup()
@@ -395,6 +411,22 @@ class HyperSolveDashboard(QWidget):
         row.addStretch()
         content.addLayout(row)
         layout.addWidget(frame)
+        frame, content = panel()
+        content.addWidget(label("Saved workspace", "Section"))
+        content.addWidget(label("Save open web tabs and your selected source. Restore reopens missing tabs without closing current ones. Sign-ins stay in Chrome’s existing profile; page history and unsaved form entries are not included.", "Muted"))
+        self.workspace_status = label("No saved workspace yet.", "Muted")
+        content.addWidget(self.workspace_status)
+        row = QHBoxLayout()
+        self.save_workspace_button = button("Save workspace", self._save_workspace)
+        self.restore_workspace_button = button("Restore workspace", self._restore_workspace)
+        self.save_workspace_button.setEnabled(False)
+        self.restore_workspace_button.setEnabled(False)
+        row.addWidget(self.save_workspace_button)
+        row.addWidget(self.restore_workspace_button)
+        row.addStretch()
+        content.addLayout(row)
+        layout.addWidget(frame)
+        self._workspace_info()
         frame, content = panel()
         content.addWidget(label("AI providers", "Section"))
         content.addWidget(label("An open tab is detected automatically. Sign-in and availability are checked when a request runs.", "Muted"))
@@ -505,29 +537,98 @@ class HyperSolveDashboard(QWidget):
             self.targets.setItemData(self.targets.count() - 1, target["url"], Qt.ItemDataRole.ToolTipRole)
         if not data["targets"]:
             self.targets.addItem("Open a page in workspace Chrome" if connected else "Connect Chrome to choose a tab", None)
-        index = self.targets.findData(previous)
-        if index >= 0:
-            self.targets.setCurrentIndex(index)
+        for index in range(self.targets.count()):
+            item = self.targets.itemData(index)
+            if item and ((self._pending_selection and item["url"] == self._pending_selection)
+                         or (not self._pending_selection and previous and
+                             ((previous.get("id") and item.get("id") == previous["id"])
+                              or (not previous.get("id") and item["url"] == previous["url"])))):
+                self.targets.setCurrentIndex(index)
+                self._pending_selection = None
+                break
         self.targets.blockSignals(False)
         for name, status in self.provider_labels.items():
             status.setText("Tab detected" if name in data["providers"] else "No tab detected")
+        self._update_start()
+
+    def _mode_changed(self):
+        self.settings.setValue("automation_mode", self.automation_mode.currentData())
         self._update_start()
 
     def _update_start(self):
         has_ai = bool(self.connection["providers"] or os.getenv("GEMINI_API_KEY") or os.getenv("OPENAI_API_KEY"))
         connected = self.connection["connected"]
         target = self.targets.currentData()
-        ready = not self._quitting and self.engine is None and connected and has_ai and bool(target)
+        automatic = self.automation_mode.currentData() == "automatic"
+        idle = not self._quitting and self.engine is None and not self.workspace_busy
+        ready = idle and connected and has_ai and (automatic or bool(target))
+        self.start_button.setText("Start automation" if automatic else "Start session")
         self.start_button.setEnabled(ready)
-        self.targets.setEnabled(connected and self.engine is None)
+        self.targets.setEnabled(connected and idle and not automatic)
+        self.automation_mode.setEnabled(idle)
+        if hasattr(self, "save_workspace_button"):
+            self.save_workspace_button.setEnabled(idle and connected)
+            self.restore_workspace_button.setEnabled(idle and self.has_saved_workspace)
         if hasattr(self, "setup_states"):
             self.setup_states[0].setText("Connected on this computer" if connected else "A separate profile for this workspace")
             self.setup_states[1].setText(", ".join(self.connection["providers"]) + " tab detected" if self.connection["providers"] else ("API key configured" if has_ai else "ChatGPT, Gemini, or Claude"))
-            self.setup_states[2].setText("Tab selected — ready to start" if target else "Open the page you want to work with")
-            self.next_button.setText("Open Chrome" if not connected else ("Connect AI" if not has_ai else "Choose tab"))
-            self.next_button.setEnabled(self.engine is None and not self._quitting)
+            self.setup_states[2].setText("Watch open tabs for supported questions" if automatic else ("Tab selected — ready to start" if target else "Open the page you want to work with"))
+            self.next_button.setText("Open Chrome" if not connected else ("Connect AI" if not has_ai else ("Start automation" if automatic else "Choose tab")))
+            self.next_button.setEnabled(idle)
             self.compact_setup_button.setText(self.next_button.text())
             self.compact_setup_button.setEnabled(self.next_button.isEnabled())
+
+    def _workspace_info(self):
+        try:
+            data = load_workspace()
+            self.has_saved_workspace = bool(data)
+            if data:
+                self.workspace_status.setText(f"Saved workspace: {len(data['tabs'])} web tab(s). URLs are stored locally on this computer.")
+        except (OSError, ValueError) as exc:
+            self.has_saved_workspace = False
+            self.workspace_status.setText("Could not read saved workspace: " + str(exc))
+
+    def _save_workspace(self):
+        if self.engine or self.workspace_busy or not self.save_workspace_button.isEnabled():
+            return
+        selected = self.targets.currentData()
+        self.workspace_busy = True
+        self.workspace_status.setText("Saving current browser tabs…")
+        self._update_start()
+        def save():
+            current = inspect_connection(self.cdp_url)
+            if not current["connected"]:
+                raise ValueError("Chrome disconnected. Reconnect before saving.")
+            return save_workspace(current["tabs"], selected["url"] if selected else None)
+        self._job(save, self._workspace_saved, self._workspace_failed)
+
+    def _workspace_saved(self, data):
+        self.workspace_busy = False
+        self.has_saved_workspace = True
+        self.workspace_status.setText(f"Saved {len(data['tabs'])} web tab(s). You can restore this workspace later.")
+        self._update_start()
+
+    def _restore_workspace(self):
+        if self.engine or self.workspace_busy or not self.restore_workspace_button.isEnabled():
+            return
+        self.workspace_busy = True
+        self.workspace_cancel.clear()
+        self.workspace_status.setText("Restoring saved tabs…")
+        self._update_start()
+        self._job(lambda: restore_workspace(self.cdp_url, cancel_event=self.workspace_cancel), self._workspace_restored, self._workspace_failed)
+
+    def _workspace_restored(self, result):
+        self.workspace_busy = False
+        self._pending_selection = result["selected_url"]
+        self.workspace_status.setText(result["message"])
+        self._update_start()
+        self.refresh_connection()
+        QTimer.singleShot(1800, self.refresh_connection)
+
+    def _workspace_failed(self, message):
+        self.workspace_busy = False
+        self.workspace_status.setText("Workspace operation failed: " + message)
+        self._update_start()
 
     def open_browser(self):
         try:
@@ -555,8 +656,9 @@ class HyperSolveDashboard(QWidget):
         self.activity.clear()
         self.progress.setValue(0)
         self.progress_label.setText("Starting…")
-        target = self.targets.currentData()
-        self.engine = EngineWorker(target["url"], self, target_id=target["id"])
+        target = self.targets.currentData() or {}
+        automatic = self.automation_mode.currentData() == "automatic"
+        self.engine = EngineWorker(target.get("url"), self, target_id=target.get("id"), auto_detect=automatic, cdp_url=self.cdp_url)
         self.engine.event.connect(self._engine_event)
         self.engine.failed.connect(self.show_error)
         self.engine.finished.connect(self._engine_finished)
@@ -564,7 +666,8 @@ class HyperSolveDashboard(QWidget):
         self.targets.setEnabled(False)
         self.stop_button.setEnabled(True)
         self.tray_stop.setEnabled(True)
-        self._set_status("Running")
+        self._set_status("Watching" if automatic else "Running")
+        self._update_start()
         self.engine.start()
 
     def stop_session(self):
@@ -592,7 +695,14 @@ class HyperSolveDashboard(QWidget):
             self.progress_label.setToolTip(payload)
         elif kind == "error":
             self.show_error(payload)
+            self.stop_session()
         elif kind == "questions":
+            self.empty.hide()
+            for old in self.question_rows.values():
+                self.results.removeWidget(old)
+                old.deleteLater()
+            self.question_rows.clear()
+            self.progress.setValue(0)
             for question in payload:
                 frame, content = panel()
                 content.addWidget(label(f"Question {question['id']}", "Section"))
@@ -611,7 +721,10 @@ class HyperSolveDashboard(QWidget):
         elif kind == "complete":
             self.progress.setValue(round(payload["done"] / max(payload["total"], 1) * 100))
             self._append_activity(f"Session finished: {payload['done']}/{payload['total']} selected via {payload['brain']}.")
-            self.stop_session()
+            if self.engine and self.engine.auto_detect:
+                self._set_status("Watching")
+            else:
+                self.stop_session()
 
     def _append_activity(self, message):
         self.activity.appendPlainText(f"{datetime.now():%H:%M:%S}  {message}")
@@ -684,6 +797,7 @@ class HyperSolveDashboard(QWidget):
         if self._quitting:
             return
         self._quitting = True
+        self.workspace_cancel.set()
         self.timer.stop()
         self.settings.setValue("geometry", self.saveGeometry())
         self.start_button.setEnabled(False)

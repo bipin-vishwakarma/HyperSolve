@@ -4,7 +4,7 @@
 ; =====================================================================
 
 #define MyAppName "HyperSolve"
-#define MyAppVersion "2.1.0"
+#define MyAppVersion "2.2.0"
 #define MyAppPublisher "Bipin Vishwakarma"
 #define MyAppURL "https://github.com/bipin-vishwakarma/HyperSolve"
 #define MyAppExeName "HyperSolve.exe"

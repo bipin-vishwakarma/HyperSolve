@@ -308,7 +308,8 @@ class UniversalA11yParser:
                     else isChecked = input.getAttribute('aria-checked') === 'true' || input.classList.contains('sel') || input.classList.contains('selected');
                     if (isChecked) isAnswered = true;
 
-                    const rawText = clean(input.innerText || input.textContent);
+                    const label = (input.labels && input.labels[0]) || input.closest('label');
+                    const rawText = clean(input.getAttribute('aria-label') || (label && label.innerText) || input.innerText || input.textContent);
                     const cleanedText = stripChoicePrefix(rawText) || rawText;
                     const refId = `__hypersolve_opt_${fallbackId}_${idx}`;
                     input.setAttribute('data-hypersolve-opt', refId);

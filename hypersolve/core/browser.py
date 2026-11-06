@@ -1,4 +1,5 @@
 import asyncio
+import re
 from typing import List, Dict, Tuple, Optional
 from playwright.async_api import async_playwright, Browser, Page, BrowserContext
 
@@ -42,16 +43,18 @@ class BrowserManager:
             pages.extend(ctx.pages)
         return pages
 
+    async def page_target_id(self, page):
+        session = await page.context.new_cdp_session(page)
+        try:
+            return (await session.send("Target.getTargetInfo"))["targetInfo"]["targetId"]
+        finally:
+            await session.detach()
+
     async def find_target_page(self, target_url, target_id=None):
         for page in await self.get_all_pages():
             if target_id:
-                session = await page.context.new_cdp_session(page)
-                try:
-                    info = await session.send("Target.getTargetInfo")
-                    if info["targetInfo"]["targetId"] == target_id:
-                        return page
-                finally:
-                    await session.detach()
+                if await self.page_target_id(page) == target_id:
+                    return page
             elif page.url == target_url:
                 return page
         return None
@@ -73,30 +76,34 @@ class BrowserManager:
             "other": []
         }
 
-        quiz_signatures = [
-            "quiz", "attempt.php", "exam", "assessment", "test", 
-            "docs.google.com/forms", "canvas", "blackboard", "moodle"
-        ]
+        from urllib.parse import urlparse
+        from hypersolve.desktop.runtime import provider_for_url
+        from hypersolve.parser.a11y_engine import UniversalA11yParser
 
-        for p in pages:
-            url = p.url.lower()
-            if "chatgpt.com" in url or "chat.openai.com" in url:
-                categorized["chatgpt"].append(p)
-            elif "gemini.google.com" in url:
-                categorized["gemini"].append(p)
-            elif "claude.ai" in url:
-                categorized["claude"].append(p)
-            elif any(sig in url for sig in quiz_signatures):
-                categorized["quiz"].append(p)
-            else:
-                categorized["other"].append(p)
-
-        # Prioritize active attempts (attempt.php) and filter out non-question landing pages (view.php)
-        active_attempts = [p for p in categorized["quiz"] if "attempt.php" in p.url.lower() or "attempt" in p.url.lower()]
-        if active_attempts:
-            categorized["quiz"] = active_attempts
-        else:
-            # If no attempt.php yet, filter out view.php so daemon waits until the user starts the attempt
-            categorized["quiz"] = [p for p in categorized["quiz"] if "view.php" not in p.url.lower()]
-
+        for page in pages:
+            provider = provider_for_url(page.url)
+            if provider:
+                categorized[provider.lower()].append(page)
+                continue
+            if urlparse(page.url).scheme not in ("http", "https") or page.is_closed():
+                categorized["other"].append(page)
+                continue
+            try:
+                evidence = await asyncio.wait_for(page.evaluate(r"""() => {
+                    const markers = document.querySelector('.qcard .qtext, .que .qtext, .question .question_text, [data-question-id]');
+                    const quizTitle = /\b(quiz|assessment|exam|practice test)\b/i.test(document.title);
+                    const quizPath = /(?:^|[\/_.-])(quiz|assessment|exam|test)(?:[\/_.-]|$)/i.test(location.pathname);
+                    const structured = document.querySelector('.question, .question-container, [role="listitem"]');
+                    return Boolean(markers) || Boolean(structured && (quizTitle || quizPath));
+                }"""), timeout=2)
+                if not evidence:
+                    categorized["other"].append(page)
+                    continue
+                questions = await asyncio.wait_for(UniversalA11yParser.parse_page(page), timeout=2)
+                questions = [q for q in questions if q.text.strip()
+                             and not re.fullmatch(r"Question\s*\d+", q.text.strip(), flags=re.IGNORECASE)
+                             and len(q.options) >= 2 and all(opt.text.strip() for opt in q.options)]
+            except Exception:
+                questions = []
+            categorized["quiz" if questions else "other"].append(page)
         return categorized

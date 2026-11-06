@@ -14,3 +14,6 @@ Keep existing user profiles and credentials private and intact. An installed bui
 
 ## Open decisions
 Audience beyond the current user is unconfirmed. The user approved a light workspace with a dark sidebar and explicitly rejected the first green theme as repetitive. The replacement uses an ink/cobalt identity and a tab/check icon. This is project direction, not a cross-project preference.
+
+## Workspace and automation
+Save one local snapshot of open web tabs and selected source. Restore missing tabs while preserving current ones and the existing Chrome profile. Automation starts only on an explicit Start; Watch mode continues detecting supported quizzes until stopped or a terminal error occurs.
