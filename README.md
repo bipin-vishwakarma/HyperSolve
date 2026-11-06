@@ -4,7 +4,22 @@ A Windows desktop browser assistant built with Python, PyQt6, and Playwright.
 
 ## Windows app
 
-The app opens to a light workspace with a dark navigation rail. The workspace uses an ink/cobalt identity and a tab/check icon. It starts stopped: nothing is selected or submitted merely by opening the app.
+The app opens to a native **Browser manager** with observed counts for working agents, pending approvals, selected answers, and review flags. The light workspace and dark navigation rail retain HyperSolve’s ink/cobalt identity.
+
+### Everyday Chrome and Edge (3.0)
+
+1. Install `HyperSolve-Setup-v3.0.0.exe` and open the manager. The installer registers its native bridge for your Windows account.
+2. In **Manager**, click **Open extension folder**. Open `chrome://extensions` or `edge://extensions`, enable Developer mode, choose **Load unpacked**, and select that `browser-extension` folder. This is a one-time manual setup. HyperSolve does not change browser security settings or install an extension silently.
+3. Open the companion popup and choose **Connect Windows manager**. Reload existing quiz/provider tabs once if needed. Detection starts automatically on supported HTTP/HTTPS pages, including newly opened tabs. Internal pages, cross-origin embedded quizzes, and incognito are not monitored.
+4. A visible glass panel reports **Quiz detected**, visible question count, and a total when exposed by the page. Choose **Start solving**, or approve the row in Windows. Detection sends only page metadata/counts to Windows; questions go to AI only after approval.
+5. Each tab has an independent agent, pause/stop controls, answer explanations, and progress. It scans supported Next pages, validates exact choices, and leaves missing, ambiguous, or uncertain answers for review. Companion mode never presses Finish or Submit.
+6. API jobs have three concurrent slots. Browser AI jobs use new conversations and queue per provider to avoid sharing a prompt box. Open and sign in to ChatGPT, Gemini, or Claude first; provider UI/authentication can still require attention.
+
+**Pause** holds the next action; a request already sent can finish. Closing a quiz tab cancels that agent. Leaving its approved quiz scope stops it. Interrupted work stops safely after a browser/worker/manager restart; scan again from the popup to create a new session. Monitoring can be toggled in the popup.
+
+The popup can save the current window’s web tabs/pinned state locally and restore them in a new window. Cookies, passwords, history, and unsaved form inputs are not copied. The bridge uses an authenticated loopback endpoint and an extension allowlist. API credentials are never stored in the extension. **Repair browser connection** re-registers a built bridge if needed. Keep the unpacked folder in its installed location.
+
+### Dedicated workspace browser (legacy workflow)
 
 1. Open **Connections → Open workspace browser**. Google Chrome is required.
 2. Sign in to ChatGPT, Gemini, or Claude in that browser. An open provider tab is detected; detection alone does not verify sign-in.
@@ -36,7 +51,7 @@ In **Connections → Saved workspace**, choose **Save workspace** to snapshot op
 
 ## Install
 
-Use `HyperSolve-Setup-v2.3.0.exe` from a built release or `dist_installer/`. Python and application dependencies are bundled. Install is per-user and does not require administrator access. Start Menu shortcuts and uninstall support are included; Desktop and Windows-login shortcuts are optional.
+Use `HyperSolve-Setup-v3.0.0.exe` from a built release or `dist_installer/`. Python, the native bridge, and the unpacked companion are bundled; a companion ZIP is also built. Install is per-user and does not require administrator access. Start Menu shortcuts and uninstall support are included; Desktop and Windows-login shortcuts are optional.
 
 New browser profiles and logs live under `%LOCALAPPDATA%\HyperSolve`. A source checkout reuses its existing `chrome_profile` when present. Updates and uninstall preserve browser data. No profile, cookies, credentials, or local logs belong in a release artifact.
 
@@ -53,7 +68,7 @@ python main.py
 
 `run_dashboard.bat` and `run_tray.bat` are convenience launchers. The browser engine remains available as `python main.py --engine`. The separate legacy screenshot HUD runs through `desktop_main.py`; it is not integrated into the new desktop workspace or bundled default entry point.
 
-Optional `GEMINI_API_KEY` and `OPENAI_API_KEY` environment variables enable API fallback. Browser sessions do not require API keys. The desktop does not store API keys in its settings.
+Optional `GEMINI_API_KEY` and `OPENAI_API_KEY` environment variables enable API solving (preferred for companion tasks when configured). `HYPERSOLVE_OPENAI_MODEL` and `HYPERSOLVE_GEMINI_MODEL` override companion model IDs. Restart the manager after changing environment variables. Browser sessions do not require API keys. The desktop does not store API keys. Source mode can register the bridge after a Windows build through **Repair browser connection**.
 
 ## Build a standalone installer
 
@@ -73,6 +88,7 @@ The installer is currently unsigned. A code-signing certificate and signing cred
 
 ```powershell
 python -m unittest discover -s tests -v
+python scripts/smoke_companion.py
 ```
 
-Offline tests use mocked browser and provider connections. They do not establish live-provider compatibility, model accuracy, or screen-capture behaviour. Logs are available from **Settings → Open log folder**.
+The companion smoke requires the Windows build and `python -m playwright install chromium`. It uses an isolated bundled-Chromium profile, temporarily registers the built native bridge, restores the previous registration, and tests local quizzes plus stub API/provider pages. It checks approval, independent tabs, pause, multi-page saving, exact selection, and no submission. These checks do not establish live-provider compatibility or model accuracy. Logs are available from **Settings → Open log folder**.

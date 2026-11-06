@@ -1,0 +1,5 @@
+const status=document.querySelector('#status');
+async function send(message){const reply=await chrome.runtime.sendMessage(message);if(reply?.error)throw Error(reply.error);return reply}
+send({type:'popup_state'}).then(state=>{document.querySelector('#monitor').checked=state.monitoring;status.textContent=state.connected?'Windows manager connected.':'Open the Windows app, then connect.'}).catch(error=>status.textContent=error.message);
+document.querySelector('#monitor').addEventListener('change',async event=>{try{await send({type:'monitor',enabled:event.target.checked});status.textContent=event.target.checked?'Automatic detection enabled.':'Detection paused.'}catch(error){status.textContent=error.message}});
+for(const type of ['connect','rescan','save_workspace','restore_workspace'])document.getElementById(type).addEventListener('click',async()=>{try{status.textContent='Working…';const result=await send({type});status.textContent=type==='connect'?'Windows manager connected.':type==='rescan'?'Tab scanned.':`${result.count} tabs ${type==='save_workspace'?'saved':'restored'}.`}catch(error){status.textContent=error.message}});

@@ -1,3 +1,15 @@
+# 3.0.0 — Browser companion and native agent manager
+
+- Make the native manager the primary view, with real per-tab counts and approval, pause/resume, and stop controls.
+- Add an MV3 Chrome/Edge companion, authenticated native bridge, installer registration, extension assets, and companion ZIP.
+- Automatically detect supported quizzes; ask approval before scanning/sending questions or selecting answers.
+- Run independent tab agents, limited parallel API jobs, and queued browser AI jobs in separate conversations.
+- Add a visible glass panel with phase transitions, reduced-motion support, explanations, copying, dragging, and collapse controls.
+- Reject fuzzy/ambiguous matches, malformed/duplicate IDs, and uncertain answers; leave them for review.
+- Bind work to the approved quiz scope and fresh option identities. Use Next to preserve multi-page form selections; never submit in companion mode.
+- Save and restore everyday-browser tab/pin snapshots from the popup.
+- Live provider compatibility/accuracy remain unverified. Browser setup requires loading the unpacked companion once.
+
 # 2.3.0 — Visible interactive session overlay
 
 - Keep the browser panel visible through harvesting, solving, selection, navigation, and completion.

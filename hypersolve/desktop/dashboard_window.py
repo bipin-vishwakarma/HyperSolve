@@ -183,6 +183,7 @@ class HyperSolveDashboard(QWidget):
         self.latest_update = None
         self.question_rows = {}
         self._quitting = False
+        self._auto_scan = auto_scan
         self.setWindowTitle("HyperSolve")
         self.setWindowIcon(QIcon(str(RESOURCE_DIR / "hypersolve.ico")))
         self.resize(1160, 780)
@@ -217,9 +218,10 @@ class HyperSolveDashboard(QWidget):
         side.addLayout(brand)
         side.addSpacing(34)
         self.nav = []
-        for index, text in enumerate(("Workspace", "Connections", "Settings")):
+        for index, text in ((3,"Manager"),(0,"Workspace"),(1,"Connections"),(2,"Settings")):
             item = button(text, lambda checked=False, i=index: self.switch_page(i))
-            item.setIcon(QIcon(str(RESOURCE_DIR / ("workspace.svg", "connections.svg", "settings.svg")[index])))
+            item.setIcon(QIcon(str(RESOURCE_DIR / ("workspace.svg", "connections.svg", "settings.svg", "workspace.svg")[index])))
+            item.setProperty("page",index)
             item.setCheckable(True)
             self.nav.append(item)
             side.addWidget(item)
@@ -234,7 +236,9 @@ class HyperSolveDashboard(QWidget):
         self._build_workspace()
         self._build_connections()
         self._build_settings()
-        self.switch_page(0)
+        from .agent_manager import build_manager
+        build_manager(self,self._auto_scan)
+        self.switch_page(3)
 
     def _page(self, title, subtitle):
         page = QWidget()
@@ -498,7 +502,7 @@ class HyperSolveDashboard(QWidget):
     def switch_page(self, index):
         self.stack.setCurrentIndex(index)
         for i, item in enumerate(self.nav):
-            item.setChecked(i == index)
+            item.setChecked(item.property("page") == index)
 
     def _job(self, function, callback, error_callback=None):
         worker = FunctionWorker(function, self)
@@ -528,7 +532,8 @@ class HyperSolveDashboard(QWidget):
         self.refresh_button.setEnabled(True)
         self.connection = data
         connected = data["connected"]
-        self.rail_state.setText("Chrome connected" if connected else "Browser not connected")
+        companion_connected = bool(self.companion and self.companion.manager.snapshot()["clients"])
+        self.rail_state.setText("Companion connected" if companion_connected else "Workspace Chrome connected" if connected else "Browser not connected")
         self.browser_status.setText("Connected to Chrome on this computer" if connected else "Chrome is not connected. Open the workspace browser, then refresh.")
         self.connection_hint.setText(("Browser connected  ·  " + (", ".join(data["providers"]) + " tab detected" if data["providers"] else "Open an AI provider tab to continue")) if connected else "Connect the workspace browser to get started.")
         previous = self.targets.currentData()
@@ -804,6 +809,9 @@ class HyperSolveDashboard(QWidget):
         self._quitting = True
         self.workspace_cancel.set()
         self.timer.stop()
+        self.agent_timer.stop()
+        if self.companion:
+            self.companion.close()
         self.settings.setValue("geometry", self.saveGeometry())
         self.start_button.setEnabled(False)
         self.check_button.setEnabled(False)

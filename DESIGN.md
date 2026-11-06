@@ -191,6 +191,6 @@ The white results workbench keeps source selection, session actions, progress, a
 - Do describe connection and session states using observed facts.
 
 ### Don't:
-- Don't add decorative shadows or motion to this flat utility without a new design decision.
+- Keep native manager motion restrained. The user approved a glass browser panel: translucent white/cobalt materials, 180ms phase transitions, and reduced-motion support. Its compact/expanded states keep action controls reachable.
 - Don't replace native window controls with a custom titlebar.
 - Don't imply that a detected provider tab proves sign-in or answer accuracy.

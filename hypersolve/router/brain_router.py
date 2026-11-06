@@ -40,54 +40,16 @@ class BrainRouter:
         return prompt
 
     def extract_answers_json(self, raw_text: str, expected_count: int) -> Optional[Dict[str, str]]:
-        """Extracts and validates JSON dictionary from model response with flexible key normalization."""
-        if not raw_text:
+        from hypersolve.companion.answers import parse_answers
+        try:
+            parsed = parse_answers(raw_text)
+            if set(parsed) != {str(i) for i in range(1, expected_count + 1)}:
+                return None
+            if not all(isinstance(value, str) and value.strip() for value in parsed.values()):
+                return None
+            return parsed
+        except (ValueError, TypeError):
             return None
-
-        text = raw_text.strip()
-
-        # 1. Look for ```json ... ``` code fence
-        code_block = re.search(r'```(?:json)?\s*(\{[\s\S]*?\})\s*```', text, re.IGNORECASE)
-        json_candidate = code_block.group(1) if code_block else None
-
-        if not json_candidate:
-            # Fallback to widest { ... }
-            braces = re.search(r'\{[\s\S]*\}', text)
-            if braces:
-                json_candidate = braces.group(0)
-
-        if json_candidate:
-            try:
-                # Remove trailing commas
-                cleaned = re.sub(r',\s*\}', '}', json_candidate)
-                parsed = json.loads(cleaned)
-                if isinstance(parsed, dict) and len(parsed) > 0:
-                    normalized = {}
-                    for k, v in parsed.items():
-                        # Extract digits: "Question 1" -> "1", "Q2" -> "2", "3" -> "3"
-                        digit_match = re.search(r'\d+', str(k))
-                        norm_k = digit_match.group(0) if digit_match else str(k).strip()
-                        normalized[norm_k] = str(v).strip()
-                    if normalized:
-                        return normalized
-            except Exception:
-                pass
-
-        # 2. Line-by-line fallback: "1. Answer" or "Question 1: Answer"
-        line_answers = {}
-        for line in text.splitlines():
-            line_str = line.strip()
-            m = re.match(r'^(?:Question\s*)?(\d+)[:.\-)\s]+(.*)$', line_str, re.IGNORECASE)
-            if m:
-                q_num = m.group(1).strip()
-                ans_str = m.group(2).strip()
-                if ans_str:
-                    line_answers[q_num] = ans_str
-
-        if line_answers:
-            return line_answers
-
-        return None
 
     async def solve_batch(
         self, questions: List[QuizQuestion], max_attempts: int = 3

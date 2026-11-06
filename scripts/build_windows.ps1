@@ -12,6 +12,10 @@ try {
     if ($LASTEXITCODE -ne 0) { throw 'Icon build failed' }
     python -m PyInstaller installer/hypersolve.spec --noconfirm --clean --distpath dist --workpath build
     if ($LASTEXITCODE -ne 0) { throw 'Executable build failed' }
+    python scripts/package_companion.py
+    if ($LASTEXITCODE -ne 0) { throw 'Companion packaging failed' }
+    python scripts/smoke_packaged.py
+    if ($LASTEXITCODE -ne 0) { throw 'Packaged manager smoke failed' }
     $CompilerCandidates = @(
         "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe",
         "$env:LOCALAPPDATA\Programs\Inno Setup 6\ISCC.exe"

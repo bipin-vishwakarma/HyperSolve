@@ -1,0 +1,44 @@
+{
+  "manifest_version": 3,
+  "name": "HyperSolve Browser Companion",
+  "version": "3.0.0",
+  "description": "Detect quizzes, confirm solving, and manage an independent agent for each tab.",
+  "key": "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAmRK8dP3pMPR2As4yVK0fe/SBNNmbQbWOzMDMlKAuIHo98GRxnEHw0CTwJw4n934i3MNkGxypD3GEg9HmX7U7CRFNHgyjKeirz0YK2HWhJAWJyxfBMe5fNfw3ryxa4D3hxeW5If5n7x0wCO2M+QZlsEJT73GJ20RroFVczUFBdhJnEVVpH1p3JhYyNM/qK5E9JjEAQ8JR6baXyErN3uj6EtQwbn3TzbW+MxUM0nwRFZZ6B1owVv+SdwrOgHQkrKBemaTKound+vsn9PGJXJAzFvcGR8qbtqZ2BaDL5+isZZkiuuSfrOniui5UMfTLaHEY8luGHGkABek65wd4/mNAAwIDAQAB",
+  "permissions": [
+    "nativeMessaging",
+    "storage",
+    "tabs",
+    "alarms"
+  ],
+  "host_permissions": [
+    "http://*/*",
+    "https://*/*"
+  ],
+  "background": {
+    "service_worker": "background.js"
+  },
+  "action": {
+    "default_popup": "popup.html",
+    "default_title": "HyperSolve"
+  },
+  "icons": {
+    "16": "icons/icon16.png",
+    "48": "icons/icon48.png",
+    "128": "icons/icon128.png"
+  },
+  "content_scripts": [
+    {
+      "matches": [
+        "http://*/*",
+        "https://*/*"
+      ],
+      "js": [
+        "parser.js",
+        "panel.js",
+        "content.js"
+      ],
+      "run_at": "document_idle",
+      "all_frames": false
+    }
+  ]
+}

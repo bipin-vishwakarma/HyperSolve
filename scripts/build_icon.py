@@ -20,5 +20,8 @@ buffer.open(QIODevice.OpenModeFlag.ReadWrite)
 image.save(buffer, "PNG")
 bitmap = Image.open(BytesIO(bytes(buffer.data())))
 bitmap.save(root / "hypersolve/assets/hypersolve.png")
+(root / "extension/icons").mkdir(parents=True,exist_ok=True)
+for size in (16,32,48,128):
+    bitmap.resize((size,size),Image.Resampling.LANCZOS).save(root / f"extension/icons/icon{size}.png")
 for target in (root / "hypersolve/assets/hypersolve.ico", root / "installer/hypersolve.ico"):
     bitmap.save(target, sizes=[(n, n) for n in (16, 20, 24, 32, 40, 48, 64, 128, 256)])

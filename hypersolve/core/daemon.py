@@ -181,65 +181,9 @@ class HyperSolveDaemon:
         return urlunparse(parsed._replace(query=urlencode(sorted(query.items()), doseq=True), fragment=fragment))
 
     def _match_option(self, target_answer: str, options: List[QuizOption]) -> Optional[QuizOption]:
-        """Robust multi-tier option matching for AI responses."""
-        if not target_answer or not options:
-            return None
-
-        clean_target = target_answer.strip()
-        clean_target_lower = clean_target.lower()
-
-        # 1. Exact match
-        for opt in options:
-            if clean_target_lower == opt.text.strip().lower():
-                return opt
-
-        # 2. Choice letter alone: 'A', 'B', '(C)', 'Option D'
-        letter_match = re.match(r'^(?:option\s+)?(?:\(?([a-d])\)?|\b([a-d])\b)[.:]?$', clean_target_lower)
-        if letter_match:
-            letter = letter_match.group(1) or letter_match.group(2)
-            idx = ord(letter) - ord('a')
-            if 0 <= idx < len(options):
-                return options[idx]
-
-        # 3. Choice letter prefix: 'A. Some text' or '(B) Some text'
-        prefix_match = re.match(r'^(?:option\s+)?(?:\(?([a-d])\)?|\b([a-d])\b)[.:\-\s]+(.*)$', clean_target_lower)
-        if prefix_match:
-            letter = prefix_match.group(1) or prefix_match.group(2)
-            idx = ord(letter) - ord('a')
-            rest_text = prefix_match.group(3).strip()
-            if 0 <= idx < len(options):
-                if not rest_text or rest_text in options[idx].text.lower() or options[idx].text.lower() in rest_text:
-                    return options[idx]
-
-        # 4. Longest substantial substring match (length >= 3)
-        best_opt = None
-        best_len = 0
-        for opt in options:
-            opt_t = opt.text.strip().lower()
-            if len(clean_target_lower) >= 3 and len(opt_t) >= 3:
-                if clean_target_lower in opt_t or opt_t in clean_target_lower:
-                    match_len = min(len(clean_target_lower), len(opt_t))
-                    if match_len > best_len:
-                        best_len = match_len
-                        best_opt = opt
-        if best_opt:
-            return best_opt
-
-        # 5. Word token overlap (Jaccard similarity)
-        target_words = set(re.findall(r'\w+', clean_target_lower))
-        if target_words:
-            best_score = 0
-            best_token_opt = None
-            for opt in options:
-                opt_words = set(re.findall(r'\w+', opt.text.strip().lower()))
-                overlap = len(target_words & opt_words)
-                if overlap > best_score:
-                    best_score = overlap
-                    best_token_opt = opt
-            if best_token_opt and best_score >= 1:
-                return best_token_opt
-
-        return None
+        from hypersolve.companion.answers import match_choice
+        index = match_choice(target_answer, [option.text for option in options])
+        return options[index] if index is not None else None
 
     async def _solve_quiz_tab(self, page: Page):
         await self.overlay_controls.checkpoint()

@@ -4,7 +4,7 @@
 ; =====================================================================
 
 #define MyAppName "HyperSolve"
-#define MyAppVersion "2.3.0"
+#define MyAppVersion "3.0.0"
 #define MyAppPublisher "Bipin Vishwakarma"
 #define MyAppURL "https://github.com/bipin-vishwakarma/HyperSolve"
 #define MyAppExeName "HyperSolve.exe"
@@ -32,7 +32,7 @@ WizardStyle=modern
 
 ; Silent OTA Update Configuration
 CloseApplications=yes
-CloseApplicationsFilter=HyperSolve.exe
+CloseApplicationsFilter=HyperSolve.exe,HyperSolveBridge.exe
 RestartApplications=no
 SetupIconFile=..\hypersolve\assets\hypersolve.ico
 UninstallDisplayIcon={app}\{#MyAppExeName}
@@ -65,4 +65,22 @@ Filename: "{app}\{#MyAppExeName}"; Description: "{cm:LaunchProgram,{#StringChang
 
 [Messages]
 WelcomeLabel1=Welcome to HyperSolve Setup
-WelcomeLabel2=Install the HyperSolve desktop app for your Windows account.%n%nPython is included. Google Chrome is required for browser sessions.%n%nYour existing browser data will be preserved.
+WelcomeLabel2=Install the HyperSolve desktop manager and browser companion for your Windows account.%n%nPython is included. Add the companion once in Chrome or Edge to monitor everyday tabs.%n%nYour existing browser data will be preserved.
+
+[Registry]
+Root: HKCU; Subkey: "Software\Google\Chrome\NativeMessagingHosts\com.hypersolve.desktop"; ValueType: string; ValueData: "{app}\native-host.json"; Flags: uninsdeletekey
+Root: HKCU; Subkey: "Software\Microsoft\Edge\NativeMessagingHosts\com.hypersolve.desktop"; ValueType: string; ValueData: "{app}\native-host.json"; Flags: uninsdeletekey
+
+[Code]
+procedure CurStepChanged(CurStep: TSetupStep);
+var BridgePath: String;
+begin
+  if CurStep = ssPostInstall then
+  begin
+    BridgePath := ExpandConstant('{app}\HyperSolveBridge.exe');
+    StringChangeEx(BridgePath, '\', '\\', True);
+    if not SaveStringToFile(ExpandConstant('{app}\native-host.json'),
+      '{"name":"com.hypersolve.desktop","description":"HyperSolve Windows manager","path":"' + BridgePath + '","type":"stdio","allowed_origins":["chrome-extension://dkhdbmeoiaimjomjbhmnhjaffgnhakke/"]}', False) then
+      RaiseException('Could not write the browser connection manifest.');
+  end;
+end;
