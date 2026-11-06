@@ -24,6 +24,10 @@ class HUDInjector:
         script = cls._get_overlay_script().replace("__HYPERSOLVE_BINDING__", json.dumps(binding_name)).replace("__HYPERSOLVE_GENERATION__", json.dumps(generation))
         await page.add_init_script(script=script)
         await page.evaluate(script)
+        await cls.reset(page)
+
+    @classmethod
+    async def reset(cls, page):
         await page.evaluate("() => window.__hypersolve?.reset()")
 
     @classmethod

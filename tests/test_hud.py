@@ -58,10 +58,11 @@ class OverlayTests(unittest.IsolatedAsyncioTestCase):
     async def test_attach_is_idempotent_and_finish_carries_error(self):
         controls = OverlayControls()
         page = MagicMock(is_closed=lambda:False)
-        with patch.object(HUDInjector,"install",new=AsyncMock()) as install, patch.object(HUDInjector,"set_paused",new=AsyncMock()), patch.object(HUDInjector,"finish",new=AsyncMock()) as finish:
+        with patch.object(HUDInjector,"install",new=AsyncMock()) as install, patch.object(HUDInjector,"set_paused",new=AsyncMock()), patch.object(HUDInjector,"reset",new=AsyncMock()) as reset, patch.object(HUDInjector,"finish",new=AsyncMock()) as finish:
             await controls.attach(page)
             await controls.attach(page)
             install.assert_awaited_once()
+            reset.assert_awaited_once_with(page)
             controls.last_error = "Provider unavailable"
             await controls.finish()
             finish.assert_awaited_once_with(page,"Provider unavailable")

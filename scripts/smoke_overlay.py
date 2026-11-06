@@ -137,6 +137,9 @@ async def main():
             stop_box = await page.get_by_role('button',name='Stop',exact=True).bounding_box()
             assert stop_box['y'] >= 0 and stop_box['y'] + stop_box['height'] <= 500
             await page.screenshot(path=str(output / 'overlay-small.png'))
+            # A new quiz on the same watched Page must not retain prior quiz answers.
+            await controls.attach(page)
+            assert await page.locator('#__hypersolve_host__ .answers li').count() == 0
             controls.owner = None
             await controls.finish()
             await browser.close()

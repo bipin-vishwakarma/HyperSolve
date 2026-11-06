@@ -21,6 +21,9 @@ class OverlayControls:
         if page not in self.pages:
             await HUDInjector.install(page, self.binding, self.handle, self.generation)
             self.pages.add(page)
+        else:
+            await HUDInjector.reset(page)
+        self.last_error = ""
         await HUDInjector.set_paused(page, not self.gate.is_set())
 
     async def checkpoint(self):
