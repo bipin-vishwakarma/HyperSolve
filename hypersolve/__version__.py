@@ -3,7 +3,7 @@ HyperSolve Version and Package Metadata
 """
 
 __title__ = "hypersolve"
-__version__ = "2.2.0"
+__version__ = "2.3.0"
 __author__ = "Bipin Vishwakarma"
 __description__ = "Windows browser assistant"
 __license__ = "MIT"

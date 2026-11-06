@@ -159,6 +159,8 @@ class EngineWorker(QThread):
             self.failed.emit(str(exc))
 
     def stop(self):
+        if self._stop_requested.is_set():
+            return
         self._stop_requested.set()
         with self._lock:
             if self._loop and self._task:
@@ -696,6 +698,9 @@ class HyperSolveDashboard(QWidget):
         elif kind == "error":
             self.show_error(payload)
             self.stop_session()
+        elif kind == "paused":
+            self._set_status("Paused" if payload else ("Watching" if self.engine and self.engine.auto_detect else "Running"))
+            self._append_activity("Paused from browser overlay" if payload else "Resumed from browser overlay")
         elif kind == "questions":
             self.empty.hide()
             for old in self.question_rows.values():

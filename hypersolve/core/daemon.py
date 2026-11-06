@@ -18,6 +18,7 @@ if sys.platform == "win32":
 from hypersolve.core.browser import BrowserManager
 from hypersolve.parser.a11y_engine import UniversalA11yParser, QuizQuestion, QuizOption
 from hypersolve.hud.injector import HUDInjector
+from hypersolve.hud.controls import OverlayControls
 from hypersolve.stealth.ghost_shield import GhostShield
 from hypersolve.injector.synthetic_events import SyntheticInjector
 from hypersolve.router.heartbeat import HeartbeatDaemon
@@ -54,8 +55,11 @@ class HyperSolveDaemon:
         self.target_url = target_url
         self.target_id = target_id
         self.on_event = on_event
+        self.overlay_controls = OverlayControls(self._emit)
 
     def _emit(self, kind, payload):
+        if kind == "error":
+            self.overlay_controls.last_error = payload
         if self.on_event:
             self.on_event(kind, payload)
         if kind == "status" and self.on_status_change:
@@ -63,6 +67,7 @@ class HyperSolveDaemon:
 
     async def start(self):
         """Supervise the selected tab; cancellation always releases resources."""
+        self.overlay_controls.owner = asyncio.current_task()
         try:
             while True:
                 try:
@@ -88,9 +93,21 @@ class HyperSolveDaemon:
                         return
                     await asyncio.sleep(3)
         finally:
-            if self.heartbeat:
-                await self.heartbeat.stop()
-            await self.browser_manager.disconnect()
+            async def cleanup():
+                try:
+                    await self.overlay_controls.finish()
+                finally:
+                    try:
+                        if self.heartbeat:
+                            await self.heartbeat.stop()
+                    finally:
+                        await self.browser_manager.disconnect()
+            cleanup_task = asyncio.create_task(cleanup())
+            try:
+                await asyncio.shield(cleanup_task)
+            except asyncio.CancelledError:
+                await cleanup_task
+                raise
 
     async def _supervisory_cycle(self):
         if not self._monitoring_announced:
@@ -99,6 +116,7 @@ class HyperSolveDaemon:
             self._monitoring_announced = True
 
         while True:
+            await self.overlay_controls.checkpoint()
             if self.target_url:
                 target = await self.browser_manager.find_target_page(self.target_url, self.target_id)
                 quiz_tabs = [target] if target else []
@@ -139,6 +157,7 @@ class HyperSolveDaemon:
 
         # Process each detected quiz tab
         for quiz_page in quiz_tabs:
+            await self.overlay_controls.checkpoint()
             if quiz_page.is_closed():
                 continue
             attempt_id = self._get_attempt_id(quiz_page.url)
@@ -223,6 +242,7 @@ class HyperSolveDaemon:
         return None
 
     async def _solve_quiz_tab(self, page: Page):
+        await self.overlay_controls.checkpoint()
         attempt_id = self._get_attempt_id(page.url)
         if attempt_id and attempt_id in self.completed_attempts:
             await asyncio.sleep(2)
@@ -251,7 +271,7 @@ class HyperSolveDaemon:
             except Exception:
                 pass
         await GhostShield.arm(page)
-        await HUDInjector.inject(page)
+        await self.overlay_controls.attach(page)
         await HUDInjector.update_stats(page, 0, 0, status="STARTING SURVEY")
 
         # -------------------------------------------------------------
@@ -266,6 +286,7 @@ class HyperSolveDaemon:
             first_url = urlunparse((u.scheme, u.netloc, new_path, u.params, urlencode(q_params, doseq=True), u.fragment))
             print("[SURVEY] Rewinding to Page 1 to harvest all questions...")
             try:
+                await self.overlay_controls.checkpoint()
                 await page.goto(first_url)
                 await page.wait_for_load_state("domcontentloaded")
                 await asyncio.sleep(0.5)
@@ -280,17 +301,21 @@ class HyperSolveDaemon:
         max_pages = 50
 
         while page_num <= max_pages:
+            await self.overlay_controls.checkpoint()
             await GhostShield.arm(page)
             print(f"  [HARVEST] Scraping Page {page_num}...")
             await HUDInjector.update_stats(page, len(harvested_questions), 0, status=f"HARVEST P.{page_num}")
 
             questions_on_page = await UniversalA11yParser.parse_page(page)
             for q in questions_on_page:
+                await self.overlay_controls.checkpoint()
+                await HUDInjector.start_scan(page, q.dom_id or "")
                 # Add unique questions by clean text
                 if not any(hq.text.strip().lower() == q.text.strip().lower() for hq in harvested_questions):
                     q.id = len(harvested_questions) + 1
                     harvested_questions.append(q)
                     print(f"    + Q{q.id}: {q.text[:65]}... ({len(q.options)} choices)")
+                    await HUDInjector.update_stats(page, len(harvested_questions), 0, status=f"HARVEST P.{page_num}")
 
             # Check if this is the final page (Finish attempt button)
             finish_btn = page.locator('input[value*="Finish attempt"], button:has-text("Finish attempt")').first
@@ -301,6 +326,7 @@ class HyperSolveDaemon:
             # Look for Next button
             next_btn = page.locator('input.mod_quiz-next-nav:not([value*="Finish"]), input[value*="Next"]:not([value*="Finish"]), button:has-text("Next Question"), button:has-text("Next page"), button:has-text("Next")').first
             if await next_btn.count() > 0 and await next_btn.is_visible():
+                await self.overlay_controls.checkpoint()
                 try:
                     async with page.expect_navigation(wait_until="domcontentloaded", timeout=10000):
                         await next_btn.click()
@@ -330,7 +356,9 @@ class HyperSolveDaemon:
         print("=======================================================")
         await HUDInjector.update_stats(page, 0, len(harvested_questions), status="ROUTING TO AI")
 
+        await self.overlay_controls.checkpoint()
         answers, brain_used = await self.brain_router.solve_batch(harvested_questions)
+        await self.overlay_controls.checkpoint()
         if not answers:
             self._emit("error", "AI returned no usable answers. Check sign-in, usage limits, and the provider tab, then retry.")
             print(f"[ERROR] AI session returned no valid answers ({brain_used}).")
@@ -338,6 +366,7 @@ class HyperSolveDaemon:
             await asyncio.sleep(3)
             return
 
+        await HUDInjector.update_stats(page, 0, len(harvested_questions), status="SELECTING", brain=brain_used)
         print(f"[AI SUCCESS] Received answers from {brain_used} ({len(answers)} solutions)!")
 
         # -------------------------------------------------------------
@@ -356,6 +385,7 @@ class HyperSolveDaemon:
             first_url = urlunparse((u.scheme, u.netloc, new_path, u.params, urlencode(q_params, doseq=True), u.fragment))
             print("  [NAVIGATION] Returning to Page 1 to inject verified answers...")
             try:
+                await self.overlay_controls.checkpoint()
                 await page.goto(first_url)
                 await page.wait_for_load_state("domcontentloaded")
                 await asyncio.sleep(0.5)
@@ -367,12 +397,15 @@ class HyperSolveDaemon:
         total_verified = 0
 
         while inject_page <= max_pages:
+            await self.overlay_controls.checkpoint()
             await GhostShield.arm(page)
-            await HUDInjector.inject(page)
+            await HUDInjector.update_stats(page, total_injected + total_verified, len(harvested_questions), status=f"SELECTING P.{inject_page}", brain=brain_used)
             print(f"  [INJECT] Processing Page {inject_page}...")
 
             questions_on_page = await UniversalA11yParser.parse_page(page)
             for q in questions_on_page:
+                await self.overlay_controls.checkpoint()
+                await HUDInjector.start_scan(page, q.dom_id or "")
                 matching_hq = None
                 for hq in harvested_questions:
                     if hq.text.strip().lower() == q.text.strip().lower():
@@ -392,6 +425,7 @@ class HyperSolveDaemon:
                 if not matched_opt:
                     continue
 
+                await self.overlay_controls.checkpoint()
                 # Verification: Is the target option ALREADY selected in DOM?
                 already_correct = any(opt.is_checked and opt.index == matched_opt.index for opt in q.options)
                 if already_correct:
@@ -403,8 +437,8 @@ class HyperSolveDaemon:
                         self._emit("status", f"Could not select question {matching_hq.id}; skipped.")
                         continue
                     total_injected += 1
-                    await HUDInjector.lock_answer(page, q.dom_id or "", matched_opt.ref_id, None, brain_used)
 
+                await HUDInjector.lock_answer(page, q.dom_id or "", matched_opt.ref_id, None, brain_used, matching_hq.id, matched_opt.text)
                 self._emit("answer", {"id": matching_hq.id, "answer": matched_opt.text,
                                        "done": total_injected + total_verified, "total": len(harvested_questions)})
 
@@ -422,7 +456,7 @@ class HyperSolveDaemon:
                 print(f"  Advancing to Summary & Review Screen...")
                 print(f"=======================================================\n")
                 await HUDInjector.update_stats(
-                    page, len(harvested_questions), len(harvested_questions),
+                    page, total_injected + total_verified, len(harvested_questions),
                     status="ALL COMPLETE", brain=brain_used
                 )
                 if self.on_solved:
@@ -430,6 +464,7 @@ class HyperSolveDaemon:
                         self.on_solved(total_injected + total_verified, len(harvested_questions), brain_used)
                     except Exception:
                         pass
+                await self.overlay_controls.checkpoint()
                 try:
                     async with page.expect_navigation(wait_until="domcontentloaded", timeout=10000):
                         await finish_btn.click()
@@ -441,6 +476,7 @@ class HyperSolveDaemon:
             # Advance to next page to continue injecting
             next_btn = page.locator('input.mod_quiz-next-nav:not([value*="Finish"]), input[value*="Next"]:not([value*="Finish"]), button:has-text("Next Question"), button:has-text("Next page"), button:has-text("Next")').first
             if await next_btn.count() > 0 and await next_btn.is_visible():
+                await self.overlay_controls.checkpoint()
                 try:
                     async with page.expect_navigation(wait_until="domcontentloaded", timeout=10000):
                         await next_btn.click()
@@ -452,6 +488,7 @@ class HyperSolveDaemon:
             else:
                 break
 
+        await HUDInjector.update_stats(page, total_injected + total_verified, len(harvested_questions), status="ALL COMPLETE", brain=brain_used)
         self._emit("complete", {"done": total_injected + total_verified,
                                 "total": len(harvested_questions), "brain": brain_used})
         # Register completed attempt to prevent any repeated loops

@@ -15,6 +15,19 @@ The app opens to a light workspace with a dark navigation rail. The workspace us
 
 The parser contains adapters for several question formats plus DOM heuristics. Compatibility and answer correctness vary with the page and provider. No accuracy percentage is fabricated, and no claim of universal compatibility or undetectability is made.
 
+## Visible browser overlay
+
+During a session, HyperSolve shows a visible cobalt panel on the quiz page. It remains through page navigation and displays harvesting, AI waiting, selection progress, current question, and selected answers.
+
+- **Pause / Resume:** holds the next page action. An AI request already sent may finish while paused; no subsequent selection/navigation proceeds until resumed.
+- **Stop:** cancels the running session, including Watch mode.
+- **Show question:** scrolls to the current question when it is on this page.
+- **Copy answers:** copies the displayed selected answers; the browser may restrict clipboard access.
+- **Collapse / Expand:** changes panel size without hiding session controls.
+- Drag the header, or focus it and use arrow keys, to reposition the panel. Position is remembered for the site while its browser session remains open.
+
+The panel is visible in the page; no capture-exclusion or undetectability claim is made. Closing or stopping a session leaves the results visible with processing controls disabled.
+
 ## Saved workspace
 
 In **Connections → Saved workspace**, choose **Save workspace** to snapshot open HTTP/HTTPS tabs and the selected source locally in `%LOCALAPPDATA%\HyperSolve\workspace.json`. This replaces the previous snapshot atomically. Cookies and passwords are not copied; sign-ins remain in Chrome's dedicated profile.
@@ -23,7 +36,7 @@ In **Connections → Saved workspace**, choose **Save workspace** to snapshot op
 
 ## Install
 
-Use `HyperSolve-Setup-v2.2.0.exe` from a built release or `dist_installer/`. Python and application dependencies are bundled. Install is per-user and does not require administrator access. Start Menu shortcuts and uninstall support are included; Desktop and Windows-login shortcuts are optional.
+Use `HyperSolve-Setup-v2.3.0.exe` from a built release or `dist_installer/`. Python and application dependencies are bundled. Install is per-user and does not require administrator access. Start Menu shortcuts and uninstall support are included; Desktop and Windows-login shortcuts are optional.
 
 New browser profiles and logs live under `%LOCALAPPDATA%\HyperSolve`. A source checkout reuses its existing `chrome_profile` when present. Updates and uninstall preserve browser data. No profile, cookies, credentials, or local logs belong in a release artifact.
 

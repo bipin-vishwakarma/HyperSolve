@@ -154,6 +154,8 @@ Panels have gently rounded corners; controls use a slightly tighter curve. Statu
 
 ## Components
 
+The browser overlay uses an ink header and white cobalt-accented panel, 360px maximum width, 12px corners and an offset shadow. Keep Pause/Resume and Stop in a sticky footer; collapse retains those controls. Selected answers and activity are bounded scroll regions, and a dragged panel reclamps after content or viewport changes. Use the same 13px Segoe UI text and 12px labels as implemented in hud/assets/styles.css.
+
 Session controls include a mode selector for selected-tab runs and explicitly started automatic detection. Connections includes a Saved workspace panel with Save/Restore actions, progress, and local snapshot status. Use existing combo-box and button styles; no new colour or typography tokens.
 
 ### Buttons

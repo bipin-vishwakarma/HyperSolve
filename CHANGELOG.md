@@ -1,3 +1,11 @@
+# 2.3.0 — Visible interactive session overlay
+
+- Keep the browser panel visible through harvesting, solving, selection, navigation, and completion.
+- Add Pause/Resume, Stop, Show question, Copy answers, Collapse/Expand, dragging and keyboard positioning.
+- Preserve panel state and selected answers across quiz pages; use generation-aware control bindings for restarted sessions.
+- Protect automated option clicks from hitting the overlay, and keep controls reachable in small viewports.
+- Synchronize paused state with the desktop and preserve shutdown cleanup during cancellation.
+
 # 2.2.0 — Saved workspaces and automation
 
 - Save and restore local web-tab snapshots while retaining the Chrome profile.

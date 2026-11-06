@@ -1,130 +1,46 @@
-/* HyperHUD: Ultra-Sleek Dynamic Island Theme (Minimalist Frosted Glass) */
-:host {
-    all: initial;
-    font-family: -apple-system, BlinkMacSystemFont, 'Inter', 'Segoe UI', Roboto, sans-serif;
-    font-size: 12px;
-    color: #f1f5f9;
-    pointer-events: none;
-    z-index: 2147483647;
-}
 
-/* Floating Dynamic Island Pill (Top Center) */
-.hypersolve-island {
-    position: fixed;
-    top: 14px;
-    left: 50%;
-    transform: translateX(-50%);
-    background: rgba(13, 17, 23, 0.85);
-    border: 1px solid rgba(255, 255, 255, 0.12);
-    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.45), 0 0 0 1px rgba(255, 255, 255, 0.05);
-    border-radius: 9999px;
-    padding: 6px 16px;
-    display: inline-flex;
-    align-items: center;
-    gap: 12px;
-    pointer-events: auto;
-    backdrop-filter: blur(16px);
-    -webkit-backdrop-filter: blur(16px);
-    transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1);
-    user-select: none;
-    cursor: default;
-    z-index: 2147483647;
-}
-
-.hypersolve-island:hover {
-    background: rgba(18, 24, 34, 0.95);
-    border-color: rgba(0, 243, 255, 0.35);
-    box-shadow: 0 12px 36px rgba(0, 0, 0, 0.6), 0 0 16px rgba(0, 243, 255, 0.2);
-}
-
-.hypersolve-island.vanished {
-    opacity: 0;
-    transform: translateX(-50%) translateY(-24px) scale(0.9);
-    pointer-events: none;
-}
-
-/* Status Indicator Dot */
-.island-pulse {
-    width: 8px;
-    height: 8px;
-    border-radius: 50%;
-    background: #10b981;
-    box-shadow: 0 0 8px #10b981;
-    animation: island-dot-pulse 2s infinite;
-}
-
-@keyframes island-dot-pulse {
-    0% { transform: scale(0.95); opacity: 0.8; }
-    50% { transform: scale(1.2); opacity: 1; box-shadow: 0 0 12px #10b981; }
-    100% { transform: scale(0.95); opacity: 0.8; }
-}
-
-.island-brand {
-    font-weight: 700;
-    letter-spacing: 0.5px;
-    color: #ffffff;
-    display: flex;
-    align-items: center;
-    gap: 4px;
-}
-
-.island-brand-icon {
-    color: #00f3ff;
-}
-
-.island-divider {
-    width: 1px;
-    height: 14px;
-    background: rgba(255, 255, 255, 0.15);
-}
-
-.island-status {
-    color: #94a3b8;
-    font-size: 11px;
-    font-weight: 500;
-    max-width: 220px;
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
-}
-
-.island-status strong {
-    color: #38bdf8;
-    font-weight: 600;
-}
-
-.island-badge {
-    background: rgba(16, 185, 129, 0.15);
-    color: #34d399;
-    font-size: 10px;
-    font-weight: 600;
-    padding: 2px 8px;
-    border-radius: 9999px;
-    border: 1px solid rgba(16, 185, 129, 0.3);
-}
-
-/* Question Option Subtle Glow */
-.hypersolve-choice-locked {
-    background: rgba(16, 185, 129, 0.08) !important;
-    border-radius: 8px !important;
-    outline: 1.5px solid #10b981 !important;
-    box-shadow: 0 0 12px rgba(16, 185, 129, 0.2) !important;
-    transition: all 0.25s ease !important;
-}
-
-/* Minimalist Inline Confidence Tag */
-.hypersolve-confidence-pill {
-    display: inline-flex;
-    align-items: center;
-    gap: 5px;
-    background: rgba(15, 23, 42, 0.85);
-    border: 1px solid rgba(16, 185, 129, 0.4);
-    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
-    color: #34d399;
-    font-size: 11px;
-    font-weight: 600;
-    padding: 2px 8px;
-    border-radius: 6px;
-    margin-bottom: 8px;
-    backdrop-filter: blur(8px);
-}
+:host { all: initial; font: 13px/1.45 "Segoe UI", system-ui, sans-serif; color: #24293b; color-scheme: light; }
+* { box-sizing: border-box; }
+.panel { position: fixed; top: 16px; right: 16px; width: min(360px, calc(100vw - 24px)); max-height: calc(100vh - 24px); overflow: auto; background: #fff; border-radius: 12px; box-shadow: 0 8px 32px #191e2e30; pointer-events: auto; }
+header { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 12px 16px; color: #fff; background: #191e2e; cursor: grab; touch-action: none; user-select: none; }
+header:active { cursor: grabbing; }
+.brand { display: flex; gap: 8px; align-items: center; font-size: 15px; font-weight: 600; }
+.brand svg { color: #aebcff; }
+button { font: 600 12px/1.3 "Segoe UI", system-ui, sans-serif; cursor: pointer; color: #303b5a; background: #f3f4f8; border: 1px solid #c2c9da; border-radius: 5px; padding: 8px 10px; }
+button:hover { background: #e9edfb; }
+button:focus-visible, summary:focus-visible, header:focus-visible { outline: 2px solid #3759dc; outline-offset: 2px; }
+button:disabled { cursor: default; background: #f3f4f8; color: #6c7589; opacity: .7; }
+header button { color: #fff; border-color: #606b82; background: transparent; }
+header button:hover { background: #313c60; }
+.status { padding: 14px 16px 8px; }
+.phase-row { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; }
+.phase { font-size: 16px; font-weight: 600; }
+.elapsed, .provider, .counts, .hint { color: #606b82; font-size: 12px; }
+.message { margin: 5px 0 10px; overflow-wrap: anywhere; }
+.steps { display: flex; gap: 8px; list-style: none; margin: 0 0 12px; padding: 0; color: #606b82; font-size: 12px; }
+.steps li { flex: 1; padding-bottom: 5px; border-bottom: 2px solid #dfe3ed; }
+.steps li[aria-current="step"] { color: #2945b5; font-weight: 600; border-color: #3759dc; }
+progress { width: 100%; height: 6px; accent-color: #3759dc; border: 0; }
+progress::-webkit-progress-bar { background: #e4e8f3; border-radius: 3px; }
+progress::-webkit-progress-value { background: #3759dc; border-radius: 3px; }
+.counts { margin-top: 5px; }
+.body { padding: 0 16px 4px; }
+.question { margin: 10px 0; font-size: 13px; max-height: 70px; overflow: auto; overflow-wrap: anywhere; }
+.answers { list-style: none; margin: 0; padding: 0; max-height: 150px; overflow: auto; }
+.answers li { padding: 7px 0; border-top: 1px solid #e4e8f3; overflow-wrap: anywhere; }
+.answers strong { color: #2945b5; margin-right: 6px; }
+.tools, .controls { display: flex; gap: 8px; flex-wrap: wrap; }
+.tools { margin: 10px 0; }
+.controls { position: sticky; bottom: 0; z-index: 1; background: white; padding: 12px 16px; border-top: 1px solid #dfe3ed; }
+.controls button { flex: 1; }
+.controls .pause { background: #3759dc; border-color: #3759dc; color: #fff; }
+.controls .pause:hover { background: #2945b5; }
+.controls .pause:disabled { background: #e7eaf1; border-color: #d8deea; color: #6c7589; }
+details { margin: 10px 0; }
+summary { cursor: pointer; color: #3c4f83; }
+.log { margin: 8px 0; padding-left: 18px; max-height: 100px; overflow: auto; color: #606b82; font-size: 12px; }
+.compact .body, .compact .steps { display: none; }
+.compact .status { padding-bottom: 10px; }
+.error .phase { color: #9d3543; }
+::selection { background: #dce3ff; color: #191e2e; }
+@media (prefers-reduced-motion: reduce) { * { scroll-behavior: auto !important; } }
